@@ -24,7 +24,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -80,7 +79,7 @@ func Export(ctx context.Context, rs io.ReadSeeker, w io.Writer, exportFormat str
 	switch exportFormat {
 	case teleport.JSON:
 	default:
-		return trace.BadParameter("unsupported format %q, %q is the only supported format", exportFormat, teleport.JSON)
+		return trace.BadParameter("export: unsupported format %q, %q is the only supported format", exportFormat, teleport.JSON)
 	}
 
 	format, err := DetectFormat(rs)
@@ -102,18 +101,14 @@ func Export(ctx context.Context, rs io.ReadSeeker, w io.Writer, exportFormat str
 				}
 				return trace.Wrap(err)
 			}
-			switch exportFormat {
-			case teleport.JSON:
-				data, err := utils.FastMarshal(event)
-				if err != nil {
-					return trace.ConvertSystemError(err)
-				}
-				_, err = fmt.Fprintln(w, string(data))
-				if err != nil {
-					return trace.ConvertSystemError(err)
-				}
-			default:
-				return trace.BadParameter("unsupported format %q, %q is the only supported format", exportFormat, teleport.JSON)
+
+			data, err := utils.FastMarshal(event)
+			if err != nil {
+				return trace.ConvertSystemError(err)
+			}
+			_, err = fmt.Fprintln(w, string(data))
+			if err != nil {
+				return trace.ConvertSystemError(err)
 			}
 		}
 	case format.Tar == true:
@@ -190,7 +185,7 @@ func (w *PlaybackWriter) SessionChunks() ([]byte, error) {
 		return nil, trace.Wrap(err)
 	}
 	defer grChunk.Close()
-	stream, err = ioutil.ReadAll(grChunk)
+	stream, err = io.ReadAll(grChunk)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -265,8 +260,8 @@ func (w *PlaybackWriter) writeEvent(event apievents.AuditEvent) error {
 	// well as well as the events file (structured events).
 	case SessionPrintEvent:
 		return trace.Wrap(w.writeSessionPrintEvent(event))
-		// Playback does not use enhanced events at the moment,
-		// so they are skipped
+	// Playback does not use enhanced events at the moment,
+	// so they are skipped
 	case SessionCommandEvent, SessionDiskEvent, SessionNetworkEvent:
 		return nil
 	// All other events get put into the general events file. These are events like

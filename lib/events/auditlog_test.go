@@ -19,22 +19,19 @@ package events
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/require"
 
-	"github.com/gravitational/teleport"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/events"
 	apievents "github.com/gravitational/teleport/api/types/events"
-	"github.com/gravitational/teleport/lib/fixtures"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
@@ -45,34 +42,25 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-type AuditTestSuite struct {
-	dataDir string
-}
-
-// bootstrap check
-func TestAuditLog(t *testing.T) { check.TestingT(t) }
-
-var _ = check.Suite(&AuditTestSuite{})
-
-func (a *AuditTestSuite) TearDownSuite(c *check.C) {
-	os.RemoveAll(a.dataDir)
+// creates a file-based audit log and returns a proper *AuditLog pointer
+// instead of the usual IAuditLog interface
+func makeLog(t *testing.T, recordSessions bool) *AuditLog {
+	t.Helper()
+	return makeLogWithClock(t, recordSessions, nil)
 }
 
 // creates a file-based audit log and returns a proper *AuditLog pointer
 // instead of the usual IAuditLog interface
-func (a *AuditTestSuite) makeLog(c *check.C, dataDir string, recordSessions bool) (*AuditLog, error) {
-	return a.makeLogWithClock(c, dataDir, recordSessions, nil)
-}
-
-// creates a file-based audit log and returns a proper *AuditLog pointer
-// instead of the usual IAuditLog interface
-func (a *AuditTestSuite) makeLogWithClock(c *check.C, dataDir string, recordSessions bool, clock clockwork.Clock) (*AuditLog, error) {
+func makeLogWithClock(t *testing.T, recordSessions bool, clock clockwork.Clock) *AuditLog {
+	t.Helper()
+	dataDir := t.TempDir()
 	handler, err := NewLegacyHandler(LegacyHandlerConfig{
 		Handler: NewMemoryUploader(),
 		Dir:     dataDir,
 	})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		t.Fatal(err)
+		return nil
 	}
 	alog, err := NewAuditLog(AuditLogConfig{
 		DataDir:        dataDir,
@@ -83,124 +71,87 @@ func (a *AuditTestSuite) makeLogWithClock(c *check.C, dataDir string, recordSess
 		UploadHandler:  handler,
 	})
 	if err != nil {
-		return nil, trace.Wrap(err)
+		t.Fatal(err)
+		return nil
 	}
-	return alog, nil
+
+	return alog
 }
 
-func (a *AuditTestSuite) SetUpTest(c *check.C) {
-	a.dataDir = c.MkDir()
-}
+func TestNewAuditLog(t *testing.T) {
+	al := makeLog(t, true)
 
-func (a *AuditTestSuite) TestNew(c *check.C) {
-	alog, err := a.makeLog(c, a.dataDir, true)
-	c.Assert(err, check.IsNil)
 	// close twice:
-	c.Assert(alog.Close(), check.IsNil)
-	c.Assert(alog.Close(), check.IsNil)
+	require.NoError(t, al.Close())
+	require.NoError(t, al.Close())
 }
 
 // TestSessionsOnOneAuthServer tests scenario when there are two auth servers
 // and session is recorded on the first one
-func (a *AuditTestSuite) TestSessionsOnOneAuthServer(c *check.C) {
+func TestSessionsOnOneAuthServer(t *testing.T) {
+	dataDir := t.TempDir()
 	fakeClock := clockwork.NewFakeClock()
-
 	uploader := NewMemoryUploader()
 
 	alog, err := NewAuditLog(AuditLogConfig{
 		Clock:          fakeClock,
-		DataDir:        a.dataDir,
+		DataDir:        dataDir,
 		RecordSessions: true,
 		ServerID:       "server1",
 		UploadHandler:  uploader,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	alog2, err := NewAuditLog(AuditLogConfig{
 		Clock:          fakeClock,
-		DataDir:        a.dataDir,
+		DataDir:        dataDir,
 		RecordSessions: true,
 		ServerID:       "server2",
 		UploadHandler:  uploader,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
-	uploadDir := c.MkDir()
+	uploadDir := t.TempDir()
 	err = os.MkdirAll(filepath.Join(uploadDir, "upload", "sessions", apidefaults.Namespace), 0755)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
+
 	sessionID := string(session.NewID())
-	forwarder, err := NewForwarder(ForwarderConfig{
-		Namespace:      apidefaults.Namespace,
-		SessionID:      session.ID(sessionID),
-		ServerID:       teleport.ComponentUpload,
-		DataDir:        uploadDir,
-		RecordSessions: true,
-		IAuditLog:      alog,
-		Clock:          fakeClock,
-	})
-	c.Assert(err, check.IsNil)
 
-	// start the session and emit data stream to it
-	firstMessage := []byte("hello")
-	err = forwarder.PostSessionSlice(SessionSlice{
+	err = alog.UploadSessionRecording(SessionRecording{
 		Namespace: apidefaults.Namespace,
-		SessionID: sessionID,
-		Chunks: []*SessionChunk{
-			// start the session
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 0,
-				EventType:  SessionStartEvent,
-				Data:       marshal(EventFields{EventLogin: "bob"}),
-			},
-			// type "hello" into session "100"
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 1,
-				ChunkIndex: 0,
-				Offset:     0,
-				EventType:  SessionPrintEvent,
-				Data:       firstMessage,
-			},
-			// emitting session end event should close the session
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 4,
-				EventType:  SessionEndEvent,
-				Data:       marshal(EventFields{EventLogin: "bob"}),
-			},
-		},
-		Version: V3,
+		SessionID: session.ID(sessionID),
+		Recording: strings.NewReader("hello"),
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(forwarder.Close(), check.IsNil)
+	require.NoError(t, err)
 
-	upload(c, uploadDir, fakeClock, alog)
+	upload(t, uploadDir, fakeClock, alog)
 
 	// does not matter which audit server is accessed the results should be the same
 	for _, a := range []*AuditLog{alog, alog2} {
 		// read the session bytes
 		history, err := a.GetSessionEvents(apidefaults.Namespace, session.ID(sessionID), 0, true)
-		c.Assert(err, check.IsNil)
-		c.Assert(history, check.HasLen, 3)
+		require.NoError(t, err)
+		require.Len(t, history, 3)
 
 		// make sure offsets were properly set (0 for the first event and 5 bytes for hello):
-		c.Assert(history[1][SessionByteOffset], check.Equals, float64(0))
-		c.Assert(history[1][SessionEventTimestamp], check.Equals, float64(0))
+		require.Equal(t, float64(0), history[1][SessionByteOffset])
+		require.Equal(t, float64(0), history[1][SessionEventTimestamp])
 
 		// fetch all bytes
 		buff, err := a.GetSessionChunk(apidefaults.Namespace, session.ID(sessionID), 0, 5000)
-		c.Assert(err, check.IsNil)
-		c.Assert(string(buff), check.Equals, string(firstMessage))
+		require.NoError(t, err)
+		require.Equal(t, "hello", string(buff))
 
 		// with offset
 		buff, err = a.GetSessionChunk(apidefaults.Namespace, session.ID(sessionID), 2, 5000)
-		c.Assert(err, check.IsNil)
-		c.Assert(string(buff), check.Equals, string(firstMessage[2:]))
+		require.NoError(t, err)
+		require.Equal(t, "llo", string(buff))
 	}
 }
 
-func upload(c *check.C, uploadDir string, clock clockwork.Clock, auditLog IAuditLog) {
+func upload(t *testing.T, uploadDir string, clock clockwork.Clock, auditLog IAuditLog) {
+	t.Helper()
+
 	// start uploader process
 	eventsC := make(chan UploadEvent, 100)
 	uploader, err := NewUploader(UploaderConfig{
@@ -213,22 +164,22 @@ func upload(c *check.C, uploadDir string, clock clockwork.Clock, auditLog IAudit
 		AuditLog:   auditLog,
 		EventsC:    eventsC,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// scanner should upload the events
 	err = uploader.Scan()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	select {
 	case event := <-eventsC:
-		c.Assert(event, check.NotNil)
-		c.Assert(event.Error, check.IsNil)
+		require.NotNil(t, event)
+		require.NoError(t, event.Error)
 	case <-time.After(time.Second):
-		c.Fatalf("Timeout wating for the upload event")
+		require.FailNow(t, "Timeout waiting for the upload event")
 	}
 }
 
-func (a *AuditTestSuite) TestSessionRecordingOff(c *check.C) {
+func TestSessionRecordingOff(t *testing.T) {
 	now := time.Now().In(time.UTC).Round(time.Second)
 
 	// create audit log with session recording disabled
@@ -236,120 +187,85 @@ func (a *AuditTestSuite) TestSessionRecordingOff(c *check.C) {
 
 	alog, err := NewAuditLog(AuditLogConfig{
 		Clock:          fakeClock,
-		DataDir:        a.dataDir,
-		RecordSessions: true,
+		DataDir:        t.TempDir(),
+		RecordSessions: false,
 		ServerID:       "server1",
 		UploadHandler:  NewMemoryUploader(),
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	username := "alice"
 	sessionID := string(session.NewID())
 
-	uploadDir := c.MkDir()
+	uploadDir := t.TempDir()
 	err = os.MkdirAll(filepath.Join(uploadDir, "upload", "sessions", apidefaults.Namespace), 0755)
-	c.Assert(err, check.IsNil)
-	forwarder, err := NewForwarder(ForwarderConfig{
-		Namespace:      apidefaults.Namespace,
-		SessionID:      session.ID(sessionID),
-		ServerID:       teleport.ComponentUpload,
-		DataDir:        uploadDir,
-		RecordSessions: false,
-		IAuditLog:      alog,
-		Clock:          fakeClock,
-	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// start the session and emit data stream to it
 	firstMessage := []byte("hello")
-	err = forwarder.PostSessionSlice(SessionSlice{
-		Namespace: apidefaults.Namespace,
-		SessionID: sessionID,
-		Chunks: []*SessionChunk{
-			// start the session
-			{
-				Time:       alog.Clock.Now().UTC().UnixNano(),
-				EventIndex: 0,
-				EventType:  SessionStartEvent,
-				Data:       marshal(EventFields{EventLogin: username}),
-			},
-			// type "hello" into session "100"
-			{
-				Time:       alog.Clock.Now().UTC().UnixNano(),
-				EventIndex: 1,
-				ChunkIndex: 0,
-				Offset:     0,
-				EventType:  SessionPrintEvent,
-				Data:       firstMessage,
-			},
-			// end the session
-			{
-				Time:       alog.Clock.Now().UTC().UnixNano(),
-				EventIndex: 0,
-				EventType:  SessionEndEvent,
-				Data:       marshal(EventFields{EventLogin: username}),
-			},
-		},
-		Version: V3,
-	})
-	c.Assert(err, check.IsNil)
-	c.Assert(forwarder.Close(), check.IsNil)
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionStart{
+		UserMetadata: apievents.UserMetadata{User: username},
+	}))
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionPrint{
+		Data: firstMessage,
+	}))
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionEnd{
+		UserMetadata: apievents.UserMetadata{User: username},
+	}))
 
-	upload(c, uploadDir, fakeClock, alog)
+	upload(t, uploadDir, fakeClock, alog)
 
-	// get all events from the audit log, should have two session event and one upload event
 	found, _, err := alog.SearchEvents(now.Add(-time.Hour), now.Add(time.Hour), apidefaults.Namespace, nil, 0, types.EventOrderAscending, "")
-	c.Assert(err, check.IsNil)
-	c.Assert(found, check.HasLen, 3)
+	require.NoError(t, err)
+	require.Len(t, found, 3)
+
 	eventA, okA := found[0].(*apievents.SessionStart)
 	eventB, okB := found[1].(*apievents.SessionEnd)
-	c.Assert(okA, check.Equals, true)
-	c.Assert(okB, check.Equals, true)
-	c.Assert(eventA.Login, check.Equals, username)
-	c.Assert(eventB.Login, check.Equals, username)
+	require.True(t, okA)
+	require.True(t, okB)
+	require.Equal(t, username, eventA.Login)
+	require.Equal(t, username, eventB.Login)
 
-	// inspect the session log for "200", should have two events
+	// inspect the session log, should have two events
 	history, err := alog.GetSessionEvents(apidefaults.Namespace, session.ID(sessionID), 0, true)
-	c.Assert(err, check.IsNil)
-	c.Assert(history, check.HasLen, 2)
+	require.NoError(t, err)
+	require.Len(t, history, 2)
 
 	// try getting the session stream, should get an error
 	_, err = alog.GetSessionChunk(apidefaults.Namespace, session.ID(sessionID), 0, 5000)
-	c.Assert(err, check.NotNil)
+	require.Error(t, err)
 }
 
-func (a *AuditTestSuite) TestBasicLogging(c *check.C) {
-	// create audit log, write a couple of events into it, close it
+func TestBasicLogging(t *testing.T) {
 	clock := clockwork.NewFakeClock()
-	alog, err := a.makeLogWithClock(c, a.dataDir, true, clock)
-	c.Assert(err, check.IsNil)
+	alog := makeLogWithClock(t, true, clock)
 
-	// emit regular event:
-	err = alog.EmitAuditEventLegacy(Event{Name: "user.joined"}, EventFields{"apples?": "yes"})
-	c.Assert(err, check.IsNil)
+	err := alog.EmitAuditEvent(context.Background(), &apievents.SessionJoin{
+		SessionMetadata: apievents.SessionMetadata{SessionID: "1"},
+		ServerMetadata:  apievents.ServerMetadata{ServerID: "2"},
+	})
+	require.NoError(t, err)
+
 	logfile := alog.localLog.file.Name()
-	c.Assert(alog.Close(), check.IsNil)
+	require.NoError(t, alog.Close())
 
-	// read back what's been written:
-	bytes, err := ioutil.ReadFile(logfile)
-	c.Assert(err, check.IsNil)
-	c.Assert(string(bytes), check.Equals,
-		fmt.Sprintf("{\"apples?\":\"yes\",\"event\":\"user.joined\",\"time\":\"%s\",\"uid\":\"%s\"}\n",
-			clock.Now().Format(time.RFC3339), fixtures.UUID))
+	bytes, err := os.ReadFile(logfile)
+	require.NoError(t, err)
+	t.Log(string(bytes))
+	require.JSONEq(t, `{"ei":0,"event":"","time":"0001-01-01T00:00:00Z","sid":"1","server_id":"2"}`, string(bytes))
 }
 
 // TestLogRotation makes sure that logs are rotated
 // on the day boundary and symlinks are created and updated
-func (a *AuditTestSuite) TestLogRotation(c *check.C) {
+func TestLogRotation(t *testing.T) {
 	start := time.Date(1984, time.April, 4, 0, 0, 0, 0, time.UTC)
 	clock := clockwork.NewFakeClockAt(start)
 
 	// create audit log, write a couple of events into it, close it
-	alog, err := a.makeLogWithClock(c, a.dataDir, true, clock)
-	c.Assert(err, check.IsNil)
-	defer func() {
-		c.Assert(alog.Close(), check.IsNil)
-	}()
+	alog := makeLogWithClock(t, true, clock)
+	t.Cleanup(func() {
+		require.NoError(t, alog.Close())
+	})
 
 	for _, duration := range []time.Duration{0, time.Hour * 25} {
 		// advance time and emit audit event
@@ -361,186 +277,156 @@ func (a *AuditTestSuite) TestLogRotation(c *check.C) {
 			Metadata:     events.Metadata{Type: "resize", Time: now},
 			TerminalSize: "10:10",
 		}
-		err = alog.EmitAuditEvent(context.TODO(), event)
-		c.Assert(err, check.IsNil)
+		err := alog.EmitAuditEvent(context.TODO(), event)
+		require.NoError(t, err)
+
 		logfile := alog.localLog.file.Name()
 
 		// make sure that file has the same date as the event
 		dt, err := parseFileTime(filepath.Base(logfile))
-		c.Assert(err, check.IsNil)
-		c.Assert(dt, check.Equals, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()))
+		require.NoError(t, err)
+		require.Equal(t, time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), dt)
 
 		// read back what's been written:
-		bytes, err := ioutil.ReadFile(logfile)
-		c.Assert(err, check.IsNil)
+		bytes, err := os.ReadFile(logfile)
+		require.NoError(t, err)
+
 		contents, err := json.Marshal(event)
 		contents = append(contents, '\n')
-		c.Assert(err, check.IsNil)
-		c.Assert(string(bytes), check.Equals, string(contents))
+		require.NoError(t, err)
+		require.Equal(t, string(contents), string(bytes))
 
 		// read back the contents using symlink
-		bytes, err = ioutil.ReadFile(filepath.Join(alog.localLog.SymlinkDir, SymlinkFilename))
-		c.Assert(err, check.IsNil)
-		c.Assert(string(bytes), check.Equals, string(contents))
+		bytes, err = os.ReadFile(filepath.Join(alog.localLog.SymlinkDir, SymlinkFilename))
+		require.NoError(t, err)
+		require.Equal(t, string(contents), string(bytes))
 
 		found, _, err := alog.SearchEvents(now.Add(-time.Hour), now.Add(time.Hour), apidefaults.Namespace, nil, 0, types.EventOrderAscending, "")
-		c.Assert(err, check.IsNil)
-		c.Assert(found, check.HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, found, 1)
 	}
 }
 
-// TestForwardAndUpload tests forwarding server and upload
-// server case
-func (a *AuditTestSuite) TestForwardAndUpload(c *check.C) {
+func TestUploadAndCompare(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	alog, err := NewAuditLog(AuditLogConfig{
-		DataDir:        a.dataDir,
+		DataDir:        t.TempDir(),
 		RecordSessions: true,
 		Clock:          fakeClock,
 		ServerID:       "remote",
 		UploadHandler:  NewMemoryUploader(),
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	defer alog.Close()
 
-	a.forwardAndUpload(c, fakeClock, alog)
+	uploadAndCompare(t, fakeClock, alog)
 }
 
 // TestLegacyHandler tests playback for legacy sessions
 // that are stored on disk in unpacked format
-func (a *AuditTestSuite) TestLegacyHandler(c *check.C) {
+func TestLegacyHandler(t *testing.T) {
+	dataDir := t.TempDir()
 	memory := NewMemoryUploader()
 	wrapper, err := NewLegacyHandler(LegacyHandlerConfig{
 		Handler: memory,
-		Dir:     a.dataDir,
+		Dir:     dataDir,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	fakeClock := clockwork.NewFakeClock()
 	alog, err := NewAuditLog(AuditLogConfig{
-		DataDir:        a.dataDir,
+		DataDir:        dataDir,
 		RecordSessions: true,
 		Clock:          fakeClock,
 		ServerID:       "remote",
 		UploadHandler:  wrapper,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
+
 	defer alog.Close()
 
-	sid, compare := a.forwardAndUpload(c, fakeClock, alog)
+	sid, compare := uploadAndCompare(t, fakeClock, alog)
 
 	// Download the session in the old format
-	ctx := context.TODO()
+	tarball, err := os.CreateTemp(t.TempDir(), "teleport-legacy")
+	require.NoError(t, err)
 
-	tarball, err := ioutil.TempFile("", "teleport-legacy")
-	c.Assert(err, check.IsNil)
-	defer os.RemoveAll(tarball.Name())
+	err = memory.Download(context.Background(), sid, tarball)
+	require.NoError(t, err)
 
-	err = memory.Download(ctx, sid, tarball)
-	c.Assert(err, check.IsNil)
+	authServers, err := getAuthServers(dataDir)
+	require.NoError(t, err)
+	require.Len(t, authServers, 1)
 
-	authServers, err := getAuthServers(a.dataDir)
-	c.Assert(err, check.IsNil)
-	c.Assert(authServers, check.HasLen, 1)
-
-	targetDir := filepath.Join(a.dataDir, authServers[0], SessionLogsDir, apidefaults.Namespace)
+	targetDir := filepath.Join(dataDir, authServers[0], SessionLogsDir, apidefaults.Namespace)
 
 	_, err = tarball.Seek(0, 0)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	err = utils.Extract(tarball, targetDir)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
-	unpacked, err := wrapper.IsUnpacked(ctx, sid)
-	c.Assert(err, check.IsNil)
-	c.Assert(unpacked, check.Equals, true)
+	unpacked, err := wrapper.IsUnpacked(context.Background(), sid)
+	require.NoError(t, err)
+	require.True(t, unpacked)
 
 	// remove recording from the uploader
 	// and make sure that playback for the session still
 	// works
 	memory.Reset()
-
 	err = compare()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 }
 
-// TestExternalLog tests forwarding server and upload
-// server case
-func (a *AuditTestSuite) TestExternalLog(c *check.C) {
+// TestExternalLog tests forwarding server and upload server case
+func TestExternalLog(t *testing.T) {
 	fileLog, err := NewFileLog(FileLogConfig{
-		Dir: c.MkDir(),
+		Dir: t.TempDir(),
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	fakeClock := clockwork.NewFakeClock()
 	alog, err := NewAuditLog(AuditLogConfig{
-		DataDir:        a.dataDir,
+		DataDir:        t.TempDir(),
 		RecordSessions: true,
 		Clock:          fakeClock,
 		ServerID:       "remote",
 		UploadHandler:  NewMemoryUploader(),
 		ExternalLog:    fileLog,
 	})
-	c.Assert(err, check.IsNil)
-	defer alog.Close()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, alog.Close())
+	})
 
-	a.forwardAndUpload(c, fakeClock, alog)
+	uploadAndCompare(t, fakeClock, alog)
 }
 
-// forwardAndUpload tests forwarding server and upload
-// server case
-func (a *AuditTestSuite) forwardAndUpload(c *check.C, fakeClock clockwork.Clock, alog IAuditLog) (session.ID, func() error) {
-	uploadDir := c.MkDir()
+func uploadAndCompare(t *testing.T, fakeClock clockwork.Clock, alog IAuditLog) (session.ID, func() error) {
+	uploadDir := t.TempDir()
 	err := os.MkdirAll(filepath.Join(uploadDir, "upload", "sessions", apidefaults.Namespace), 0755)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	sessionID := session.NewID()
-	forwarder, err := NewForwarder(ForwarderConfig{
-		Namespace:      apidefaults.Namespace,
-		SessionID:      sessionID,
-		ServerID:       "upload",
-		DataDir:        uploadDir,
-		RecordSessions: true,
-		IAuditLog:      alog,
-	})
-	c.Assert(err, check.IsNil)
 
 	// start the session and emit data stream to it and wrap it up
 	firstMessage := []byte("hello")
-	err = forwarder.PostSessionSlice(SessionSlice{
-		Namespace: apidefaults.Namespace,
-		SessionID: string(sessionID),
-		Chunks: []*SessionChunk{
-			// start the seession
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 0,
-				EventType:  SessionStartEvent,
-				Data:       marshal(EventFields{EventLogin: "bob"}),
-			},
-			// type "hello" into session "100"
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 1,
-				ChunkIndex: 0,
-				Offset:     0,
-				EventType:  SessionPrintEvent,
-				Data:       firstMessage,
-			},
-			// emitting session end event should close the session
-			{
-				Time:       fakeClock.Now().UTC().UnixNano(),
-				EventIndex: 4,
-				EventType:  SessionEndEvent,
-				Data:       marshal(EventFields{EventLogin: "bob"}),
-			},
-		},
-		Version: V2,
-	})
-	c.Assert(err, check.IsNil)
-	c.Assert(forwarder.Close(), check.IsNil)
 
-	upload(c, uploadDir, fakeClock, alog)
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionStart{
+		UserMetadata:    apievents.UserMetadata{User: "bob"},
+		SessionMetadata: apievents.SessionMetadata{SessionID: sessionID.String()},
+	}))
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionPrint{
+		Metadata: apievents.Metadata{Index: 1},
+		Data:     firstMessage,
+	}))
+	require.NoError(t, alog.EmitAuditEvent(context.Background(), &apievents.SessionEnd{
+		Metadata:        apievents.Metadata{Index: 4},
+		UserMetadata:    apievents.UserMetadata{User: "bob"},
+		SessionMetadata: apievents.SessionMetadata{SessionID: sessionID.String()},
+	}))
+
+	upload(t, uploadDir, fakeClock, alog)
 
 	compare := func() error {
 		history, err := alog.GetSessionEvents(apidefaults.Namespace, sessionID, 0, true)
@@ -592,9 +478,9 @@ func (a *AuditTestSuite) forwardAndUpload(c *check.C, fakeClock clockwork.Clock,
 	for i := 0; i < iterations; i++ {
 		select {
 		case err := <-resultsC:
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 		case <-timeout:
-			c.Fatalf("timeout waiting for goroutines to finish")
+			require.FailNow(t, "timeout waiting for goroutines to finish")
 		}
 	}
 

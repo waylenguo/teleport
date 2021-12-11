@@ -2055,20 +2055,6 @@ func (s *streamWithRoles) EmitAuditEvent(ctx context.Context, event apievents.Au
 	return s.stream.EmitAuditEvent(ctx, event)
 }
 
-func (a *ServerWithRoles) EmitAuditEventLegacy(event events.Event, fields events.EventFields) error {
-	if err := a.action(apidefaults.Namespace, types.KindEvent, types.VerbCreate, types.VerbUpdate); err != nil {
-		return trace.Wrap(err)
-	}
-	return a.alog.EmitAuditEventLegacy(event, fields)
-}
-
-func (a *ServerWithRoles) PostSessionSlice(slice events.SessionSlice) error {
-	if err := a.action(slice.Namespace, types.KindEvent, types.VerbCreate, types.VerbUpdate); err != nil {
-		return trace.Wrap(err)
-	}
-	return a.alog.PostSessionSlice(slice)
-}
-
 func (a *ServerWithRoles) UploadSessionRecording(r events.SessionRecording) error {
 	if err := r.CheckAndSetDefaults(); err != nil {
 		return trace.Wrap(err)

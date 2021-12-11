@@ -16,6 +16,8 @@ package events
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,4 +60,12 @@ func TestStreamerCompleteEmpty(t *testing.T) {
 		t.Fatal("Timeout waiting for emitter to complete")
 	case <-doneC:
 	}
+}
+
+func TestProtoReaderFailsOnEOF(t *testing.T) {
+	pr := NewProtoReader(strings.NewReader(""))
+
+	_, err := pr.Read(context.Background())
+	require.Error(t, err)
+	require.Equal(t, io.EOF, err)
 }

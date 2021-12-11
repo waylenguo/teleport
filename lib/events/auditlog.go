@@ -346,48 +346,11 @@ func (l *AuditLog) UploadSessionRecording(r SessionRecording) error {
 		l.log.WithFields(log.Fields{"duration": time.Since(start), "session-id": r.SessionID}).Warningf("Session upload failed: %v", trace.DebugReport(err))
 		return trace.Wrap(err)
 	}
+	// TODO(zmb3): verify that SessionUpload was emitted for r.SEssionID with SessionUploadIndex and URL
+	_ = url
 	l.log.WithFields(log.Fields{"duration": time.Since(start), "session-id": r.SessionID}).Debugf("Session upload completed.")
-	return l.EmitAuditEventLegacy(SessionUploadE, EventFields{
-		SessionEventID: string(r.SessionID),
-		URL:            url,
-		EventIndex:     SessionUploadIndex,
-	})
-}
-
-// PostSessionSlice submits slice of session chunks to the audit log server.
-func (l *AuditLog) PostSessionSlice(slice SessionSlice) error {
-	if slice.Namespace == "" {
-		return trace.BadParameter("missing parameter Namespace")
-	}
-	if len(slice.Chunks) == 0 {
-		return trace.BadParameter("missing session chunks")
-	}
-	if l.ExternalLog != nil {
-		return l.ExternalLog.PostSessionSlice(slice)
-	}
-	if slice.Version < V3 {
-		return trace.BadParameter("audit log rejected %v log entry, upgrade your components.", slice.Version)
-	}
-	// V3 API does not write session log to local session directory,
-	// instead it writes locally, this internal method captures
-	// non-print events to the global audit log
-	return l.processSlice(nil, &slice)
-}
-
-func (l *AuditLog) processSlice(sl SessionLogger, slice *SessionSlice) error {
-	for _, chunk := range slice.Chunks {
-		if chunk.EventType == SessionPrintEvent || chunk.EventType == "" {
-			continue
-		}
-		fields, err := EventFromChunk(slice.SessionID, chunk)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		if err := l.EmitAuditEventLegacy(Event{Name: chunk.EventType}, fields); err != nil {
-			return trace.Wrap(err)
-		}
-	}
 	return nil
+
 }
 
 func getAuthServers(dataDir string) ([]string, error) {
@@ -981,29 +944,6 @@ func (l *AuditLog) EmitAuditEvent(ctx context.Context, event apievents.AuditEven
 	return nil
 }
 
-// EmitAuditEventLegacy adds a new event to the log. If emitting fails, a Prometheus
-// counter is incremented.
-func (l *AuditLog) EmitAuditEventLegacy(event Event, fields EventFields) error {
-	// If an external logger has been set, use it as the emitter, otherwise
-	// fallback to the local disk based emitter.
-	var emitAuditEvent func(event Event, fields EventFields) error
-	if l.ExternalLog != nil {
-		emitAuditEvent = l.ExternalLog.EmitAuditEventLegacy
-	} else {
-		emitAuditEvent = l.getLocalLog().EmitAuditEventLegacy
-	}
-
-	// Emit the event. If it fails for any reason a Prometheus counter is
-	// incremented.
-	err := emitAuditEvent(event, fields)
-	if err != nil {
-		AuditFailedEmit.Inc()
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-
 // auditDirs returns directories used for audit log storage
 func (l *AuditLog) auditDirs() ([]string, error) {
 	authServers, err := getAuthServers(l.DataDir)
@@ -1276,15 +1216,7 @@ const loggerClosedMessage = "the logger has been closed"
 
 type closedLogger struct{}
 
-func (a *closedLogger) EmitAuditEventLegacy(e Event, f EventFields) error {
-	return trace.NotImplemented(loggerClosedMessage)
-}
-
 func (a *closedLogger) EmitAuditEvent(ctx context.Context, e apievents.AuditEvent) error {
-	return trace.NotImplemented(loggerClosedMessage)
-}
-
-func (a *closedLogger) PostSessionSlice(s SessionSlice) error {
 	return trace.NotImplemented(loggerClosedMessage)
 }
 

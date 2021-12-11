@@ -447,7 +447,7 @@ const (
 	// V1 is the V1 version of slice chunks API,
 	// it is 0 because it was not defined before
 	V1 = 0
-	// V2 is the V2 version of slice chunks  API
+	// V2 is the V2 version of slice chunks API
 	V2 = 2
 	// V3 is almost like V2, but it assumes
 	// that session recordings are being uploaded
@@ -598,18 +598,8 @@ type IAuditLog interface {
 	// Closer releases connection and resources associated with log if any
 	io.Closer
 
-	// EmitAuditEventLegacy emits audit in legacy format
-	// DELETE IN: 5.0.0
-	EmitAuditEventLegacy(Event, EventFields) error
-
 	// EmitAuditEvent emits audit event
 	EmitAuditEvent(context.Context, apievents.AuditEvent) error
-
-	// DELETE IN: 2.7.0
-	// This method is no longer necessary as nodes and proxies >= 2.7.0
-	// use UploadSessionRecording method.
-	// PostSessionSlice sends chunks of recorded session to the event log
-	PostSessionSlice(SessionSlice) error
 
 	// UploadSessionRecording uploads session recording to the audit server
 	UploadSessionRecording(r SessionRecording) error
@@ -670,7 +660,6 @@ func (f EventFields) AsString() string {
 		f.GetString(EventLogin),
 		f.GetInt(EventCursor),
 		f.GetInt(SessionPrintEventBytes))
-
 }
 
 // GetType returns the type (string) of the event
