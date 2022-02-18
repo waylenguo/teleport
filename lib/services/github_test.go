@@ -27,7 +27,7 @@ var _ = check.Suite(&GithubSuite{})
 
 func (g *GithubSuite) TestUnmarshal(c *check.C) {
 	data := []byte(`{"kind": "github",
-"version": "v3",
+"version": "v4",
 "metadata": {
   "name": "github"
 },
@@ -36,10 +36,10 @@ func (g *GithubSuite) TestUnmarshal(c *check.C) {
   "client_secret": "bbb",
   "display": "Github",
   "redirect_url": "https://localhost:3080/v1/webapi/github/callback",
-  "teams_to_logins": [{
+  "teams_to_roles": [{
     "organization": "gravitational",
     "team": "admins",
-    "logins": ["admin"]
+    "roles": ["admin"]
   }]
 }}`)
 	connector, err := UnmarshalGithubConnector(data)
@@ -49,11 +49,11 @@ func (g *GithubSuite) TestUnmarshal(c *check.C) {
 		ClientSecret: "bbb",
 		RedirectURL:  "https://localhost:3080/v1/webapi/github/callback",
 		Display:      "Github",
-		TeamsToLogins: []types.TeamMapping{
+		TeamsToRoles: []types.TeamRolesMapping{
 			{
 				Organization: "gravitational",
 				Team:         "admins",
-				Logins:       []string{"admin"},
+				Roles:        []string{"admin"},
 			},
 		},
 	})

@@ -201,40 +201,40 @@ func (c *GithubConnectorV3) SetRedirectURL(redirectURL string) {
 func (c *GithubConnectorV3) GetTeamsToRoles() []TeamRolesMapping {
 	if c.Version == V4 {
 		return c.Spec.TeamsToRoles
-	} else {
-		var mappings []TeamRolesMapping
-		for _, mapping := range c.Spec.TeamsToLogins {
-			mappings = append(mappings, TeamRolesMapping{
-				Organization: mapping.Organization,
-				Team:         mapping.Team,
-				Roles:        mapping.Logins,
-				KubeGroups:   mapping.KubeGroups,
-				KubeUsers:    mapping.KubeUsers,
-			})
-		}
-
-		return mappings
 	}
+
+	var mappings []TeamRolesMapping
+	for _, mapping := range c.Spec.TeamsToLogins {
+		mappings = append(mappings, TeamRolesMapping{
+			Organization: mapping.Organization,
+			Team:         mapping.Team,
+			Roles:        mapping.Logins,
+			KubeGroups:   mapping.KubeGroups,
+			KubeUsers:    mapping.KubeUsers,
+		})
+	}
+
+	return mappings
 }
 
 // SetTeamsToRoles sets the connector team membership mappings
 func (c *GithubConnectorV3) SetTeamsToRoles(teamsToRoles []TeamRolesMapping) {
 	if c.Version == V4 {
 		c.Spec.TeamsToRoles = teamsToRoles
-	} else {
-		var mappings []TeamMapping
-		for _, mapping := range teamsToRoles {
-			mappings = append(mappings, TeamMapping{
-				Organization: mapping.Organization,
-				Team:         mapping.Team,
-				Logins:       mapping.Roles,
-				KubeGroups:   mapping.KubeGroups,
-				KubeUsers:    mapping.KubeUsers,
-			})
-		}
-
-		c.Spec.TeamsToLogins = mappings
 	}
+
+	var mappings []TeamMapping
+	for _, mapping := range teamsToRoles {
+		mappings = append(mappings, TeamMapping{
+			Organization: mapping.Organization,
+			Team:         mapping.Team,
+			Logins:       mapping.Roles,
+			KubeGroups:   mapping.KubeGroups,
+			KubeUsers:    mapping.KubeUsers,
+		})
+	}
+
+	c.Spec.TeamsToLogins = mappings
 }
 
 // GetDisplay returns the connector display name
