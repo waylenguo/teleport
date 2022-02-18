@@ -67,48 +67,48 @@ func (g *GithubSuite) TestMapClaims(c *check.C) {
 		ClientSecret: "bbb",
 		RedirectURL:  "https://localhost:3080/v1/webapi/github/callback",
 		Display:      "Github",
-		TeamsToLogins: []types.TeamMapping{
+		TeamsToRoles: []types.TeamRolesMapping{
 			{
 				Organization: "gravitational",
 				Team:         "admins",
-				Logins:       []string{"admin", "dev"},
+				Roles:        []string{"admin", "dev"},
 				KubeGroups:   []string{"system:masters", "kube-devs"},
 				KubeUsers:    []string{"alice@example.com"},
 			},
 			{
 				Organization: "gravitational",
 				Team:         "devs",
-				Logins:       []string{"dev", "test"},
+				Roles:        []string{"dev", "test"},
 				KubeGroups:   []string{"kube-devs"},
 			},
 		},
 	})
 	c.Assert(err, check.IsNil)
 
-	logins, kubeGroups, kubeUsers := connector.MapClaims(types.GithubClaims{
+	roles, kubeGroups, kubeUsers := connector.MapClaims(types.GithubClaims{
 		OrganizationToTeams: map[string][]string{
 			"gravitational": {"admins"},
 		},
 	})
-	c.Assert(logins, check.DeepEquals, []string{"admin", "dev"})
+	c.Assert(roles, check.DeepEquals, []string{"admin", "dev"})
 	c.Assert(kubeGroups, check.DeepEquals, []string{"system:masters", "kube-devs"})
 	c.Assert(kubeUsers, check.DeepEquals, []string{"alice@example.com"})
 
-	logins, kubeGroups, kubeUsers = connector.MapClaims(types.GithubClaims{
+	roles, kubeGroups, kubeUsers = connector.MapClaims(types.GithubClaims{
 		OrganizationToTeams: map[string][]string{
 			"gravitational": {"devs"},
 		},
 	})
-	c.Assert(logins, check.DeepEquals, []string{"dev", "test"})
+	c.Assert(roles, check.DeepEquals, []string{"dev", "test"})
 	c.Assert(kubeGroups, check.DeepEquals, []string{"kube-devs"})
 	c.Assert(kubeUsers, check.DeepEquals, []string(nil))
 
-	logins, kubeGroups, kubeUsers = connector.MapClaims(types.GithubClaims{
+	roles, kubeGroups, kubeUsers = connector.MapClaims(types.GithubClaims{
 		OrganizationToTeams: map[string][]string{
 			"gravitational": {"admins", "devs"},
 		},
 	})
-	c.Assert(logins, check.DeepEquals, []string{"admin", "dev", "test"})
+	c.Assert(roles, check.DeepEquals, []string{"admin", "dev", "test"})
 	c.Assert(kubeGroups, check.DeepEquals, []string{"system:masters", "kube-devs"})
 	c.Assert(kubeUsers, check.DeepEquals, []string{"alice@example.com"})
 }
