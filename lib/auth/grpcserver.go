@@ -2371,7 +2371,7 @@ func (g *GRPCServer) DeleteSAMLConnector(ctx context.Context, req *types.Resourc
 }
 
 // GetGithubConnector retrieves a Github connector by name.
-func (g *GRPCServer) GetGithubConnector(ctx context.Context, req *types.ResourceWithSecretsRequest) (*types.GithubConnectorV3, error) {
+func (g *GRPCServer) GetGithubConnector(ctx context.Context, req *types.ResourceWithSecretsRequest) (*types.GithubConnectorV4, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -2380,15 +2380,15 @@ func (g *GRPCServer) GetGithubConnector(ctx context.Context, req *types.Resource
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	githubConnectorV3, ok := gc.(*types.GithubConnectorV3)
+	GithubConnectorV4, ok := gc.(*types.GithubConnectorV4)
 	if !ok {
 		return nil, trace.Errorf("encountered unexpected Github connector type: %T", gc)
 	}
-	return githubConnectorV3, nil
+	return GithubConnectorV4, nil
 }
 
 // GetGithubConnectors retrieves all Github connectors.
-func (g *GRPCServer) GetGithubConnectors(ctx context.Context, req *types.ResourcesWithSecretsRequest) (*types.GithubConnectorV3List, error) {
+func (g *GRPCServer) GetGithubConnectors(ctx context.Context, req *types.ResourcesWithSecretsRequest) (*types.GithubConnectorV4List, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -2397,20 +2397,20 @@ func (g *GRPCServer) GetGithubConnectors(ctx context.Context, req *types.Resourc
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	githubConnectorsV3 := make([]*types.GithubConnectorV3, len(gcs))
+	githubConnectorsV3 := make([]*types.GithubConnectorV4, len(gcs))
 	for i, gc := range gcs {
 		var ok bool
-		if githubConnectorsV3[i], ok = gc.(*types.GithubConnectorV3); !ok {
+		if githubConnectorsV3[i], ok = gc.(*types.GithubConnectorV4); !ok {
 			return nil, trace.Errorf("encountered unexpected Github connector type: %T", gc)
 		}
 	}
-	return &types.GithubConnectorV3List{
+	return &types.GithubConnectorV4List{
 		GithubConnectors: githubConnectorsV3,
 	}, nil
 }
 
 // UpsertGithubConnector upserts a Github connector.
-func (g *GRPCServer) UpsertGithubConnector(ctx context.Context, GithubConnector *types.GithubConnectorV3) (*empty.Empty, error) {
+func (g *GRPCServer) UpsertGithubConnector(ctx context.Context, GithubConnector *types.GithubConnectorV4) (*empty.Empty, error) {
 	auth, err := g.authenticate(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)

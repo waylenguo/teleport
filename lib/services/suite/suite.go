@@ -963,14 +963,14 @@ func (s *ServicesTestSuite) TunnelConnectionsCRUD(c *check.C) {
 
 func (s *ServicesTestSuite) GithubConnectorCRUD(c *check.C) {
 	ctx := context.Background()
-	connector := &types.GithubConnectorV3{
+	connector := &types.GithubConnectorV4{
 		Kind:    types.KindGithubConnector,
 		Version: types.V3,
 		Metadata: types.Metadata{
 			Name:      "github",
 			Namespace: apidefaults.Namespace,
 		},
-		Spec: types.GithubConnectorSpecV3{
+		Spec: types.GithubConnectorSpecV4{
 			ClientID:     "aaa",
 			ClientSecret: "bbb",
 			RedirectURL:  "https://localhost:3080/v1/webapi/github/callback",

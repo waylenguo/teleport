@@ -44,7 +44,7 @@ func (g *GithubSuite) TestUnmarshal(c *check.C) {
 }}`)
 	connector, err := UnmarshalGithubConnector(data)
 	c.Assert(err, check.IsNil)
-	expected, err := types.NewGithubConnector("github", types.GithubConnectorSpecV3{
+	expected, err := types.NewGithubConnector("github", types.GithubConnectorSpecV4{
 		ClientID:     "aaa",
 		ClientSecret: "bbb",
 		RedirectURL:  "https://localhost:3080/v1/webapi/github/callback",
@@ -62,7 +62,7 @@ func (g *GithubSuite) TestUnmarshal(c *check.C) {
 }
 
 func (g *GithubSuite) TestMapClaims(c *check.C) {
-	connector, err := types.NewGithubConnector("github", types.GithubConnectorSpecV3{
+	connector, err := types.NewGithubConnector("github", types.GithubConnectorSpecV4{
 		ClientID:     "aaa",
 		ClientSecret: "bbb",
 		RedirectURL:  "https://localhost:3080/v1/webapi/github/callback",

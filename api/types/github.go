@@ -56,8 +56,8 @@ type GithubConnector interface {
 }
 
 // NewGithubConnector creates a new Github connector from name and spec
-func NewGithubConnector(name string, spec GithubConnectorSpecV3) (GithubConnector, error) {
-	c := &GithubConnectorV3{
+func NewGithubConnector(name string, spec GithubConnectorSpecV4) (GithubConnector, error) {
+	c := &GithubConnectorV4{
 		Metadata: Metadata{
 			Name: name,
 		},
@@ -80,67 +80,67 @@ type GithubClaims struct {
 }
 
 // GetVersion returns resource version
-func (c *GithubConnectorV3) GetVersion() string {
+func (c *GithubConnectorV4) GetVersion() string {
 	return c.Version
 }
 
 // GetKind returns resource kind
-func (c *GithubConnectorV3) GetKind() string {
+func (c *GithubConnectorV4) GetKind() string {
 	return c.Kind
 }
 
 // GetSubKind returns resource sub kind
-func (c *GithubConnectorV3) GetSubKind() string {
+func (c *GithubConnectorV4) GetSubKind() string {
 	return c.SubKind
 }
 
 // SetSubKind sets resource subkind
-func (c *GithubConnectorV3) SetSubKind(s string) {
+func (c *GithubConnectorV4) SetSubKind(s string) {
 	c.SubKind = s
 }
 
 // GetResourceID returns resource ID
-func (c *GithubConnectorV3) GetResourceID() int64 {
+func (c *GithubConnectorV4) GetResourceID() int64 {
 	return c.Metadata.ID
 }
 
 // SetResourceID sets resource ID
-func (c *GithubConnectorV3) SetResourceID(id int64) {
+func (c *GithubConnectorV4) SetResourceID(id int64) {
 	c.Metadata.ID = id
 }
 
 // GetName returns the name of the connector
-func (c *GithubConnectorV3) GetName() string {
+func (c *GithubConnectorV4) GetName() string {
 	return c.Metadata.GetName()
 }
 
 // SetName sets the connector name
-func (c *GithubConnectorV3) SetName(name string) {
+func (c *GithubConnectorV4) SetName(name string) {
 	c.Metadata.SetName(name)
 }
 
 // Expiry returns the connector expiration time
-func (c *GithubConnectorV3) Expiry() time.Time {
+func (c *GithubConnectorV4) Expiry() time.Time {
 	return c.Metadata.Expiry()
 }
 
 // SetExpiry sets the connector expiration time
-func (c *GithubConnectorV3) SetExpiry(expires time.Time) {
+func (c *GithubConnectorV4) SetExpiry(expires time.Time) {
 	c.Metadata.SetExpiry(expires)
 }
 
 // SetMetadata sets connector metadata
-func (c *GithubConnectorV3) SetMetadata(meta Metadata) {
+func (c *GithubConnectorV4) SetMetadata(meta Metadata) {
 	c.Metadata = meta
 }
 
 // GetMetadata returns the connector metadata
-func (c *GithubConnectorV3) GetMetadata() Metadata {
+func (c *GithubConnectorV4) GetMetadata() Metadata {
 	return c.Metadata
 }
 
 // WithoutSecrets returns an instance of resource without secrets.
-func (c *GithubConnectorV3) WithoutSecrets() Resource {
+func (c *GithubConnectorV4) WithoutSecrets() Resource {
 	if c.GetClientSecret() == "" {
 		return c
 	}
@@ -150,7 +150,7 @@ func (c *GithubConnectorV3) WithoutSecrets() Resource {
 }
 
 // setStaticFields sets static resource header and metadata fields.
-func (c *GithubConnectorV3) setStaticFields() {
+func (c *GithubConnectorV4) setStaticFields() {
 	c.Kind = KindGithubConnector
 
 	if c.Version != V3 && c.Version != V4 {
@@ -159,7 +159,7 @@ func (c *GithubConnectorV3) setStaticFields() {
 }
 
 // CheckAndSetDefaults verifies the connector is valid and sets some defaults
-func (c *GithubConnectorV3) CheckAndSetDefaults() error {
+func (c *GithubConnectorV4) CheckAndSetDefaults() error {
 	c.setStaticFields()
 	if err := c.Metadata.CheckAndSetDefaults(); err != nil {
 		return trace.Wrap(err)
@@ -168,37 +168,37 @@ func (c *GithubConnectorV3) CheckAndSetDefaults() error {
 }
 
 // GetClientID returns the connector client ID
-func (c *GithubConnectorV3) GetClientID() string {
+func (c *GithubConnectorV4) GetClientID() string {
 	return c.Spec.ClientID
 }
 
 // SetClientID sets the connector client ID
-func (c *GithubConnectorV3) SetClientID(id string) {
+func (c *GithubConnectorV4) SetClientID(id string) {
 	c.Spec.ClientID = id
 }
 
 // GetClientSecret returns the connector client secret
-func (c *GithubConnectorV3) GetClientSecret() string {
+func (c *GithubConnectorV4) GetClientSecret() string {
 	return c.Spec.ClientSecret
 }
 
 // SetClientSecret sets the connector client secret
-func (c *GithubConnectorV3) SetClientSecret(secret string) {
+func (c *GithubConnectorV4) SetClientSecret(secret string) {
 	c.Spec.ClientSecret = secret
 }
 
 // GetRedirectURL returns the connector redirect URL
-func (c *GithubConnectorV3) GetRedirectURL() string {
+func (c *GithubConnectorV4) GetRedirectURL() string {
 	return c.Spec.RedirectURL
 }
 
 // SetRedirectURL sets the connector redirect URL
-func (c *GithubConnectorV3) SetRedirectURL(redirectURL string) {
+func (c *GithubConnectorV4) SetRedirectURL(redirectURL string) {
 	c.Spec.RedirectURL = redirectURL
 }
 
 // GetTeamsToRoles returns the connector team membership mappings
-func (c *GithubConnectorV3) GetTeamsToRoles() []TeamRolesMapping {
+func (c *GithubConnectorV4) GetTeamsToRoles() []TeamRolesMapping {
 	if c.Version == V4 {
 		return c.Spec.TeamsToRoles
 	}
@@ -218,7 +218,7 @@ func (c *GithubConnectorV3) GetTeamsToRoles() []TeamRolesMapping {
 }
 
 // SetTeamsToRoles sets the connector team membership mappings
-func (c *GithubConnectorV3) SetTeamsToRoles(teamsToRoles []TeamRolesMapping) {
+func (c *GithubConnectorV4) SetTeamsToRoles(teamsToRoles []TeamRolesMapping) {
 	if c.Version == V4 {
 		c.Spec.TeamsToRoles = teamsToRoles
 	}
@@ -238,18 +238,18 @@ func (c *GithubConnectorV3) SetTeamsToRoles(teamsToRoles []TeamRolesMapping) {
 }
 
 // GetDisplay returns the connector display name
-func (c *GithubConnectorV3) GetDisplay() string {
+func (c *GithubConnectorV4) GetDisplay() string {
 	return c.Spec.Display
 }
 
 // SetDisplay sets the connector display name
-func (c *GithubConnectorV3) SetDisplay(display string) {
+func (c *GithubConnectorV4) SetDisplay(display string) {
 	c.Spec.Display = display
 }
 
 // MapClaims returns a list of logins based on the provided claims,
 // returns a list of roles and list of kubernetes groups
-func (c *GithubConnectorV3) MapClaims(claims GithubClaims) ([]string, []string, []string) {
+func (c *GithubConnectorV4) MapClaims(claims GithubClaims) ([]string, []string, []string) {
 	var roles, kubeGroups, kubeUsers []string
 	for _, mapping := range c.GetTeamsToRoles() {
 		teams, ok := claims.OrganizationToTeams[mapping.Organization]

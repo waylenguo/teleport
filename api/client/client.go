@@ -1464,7 +1464,7 @@ func (c *Client) GetGithubConnectors(ctx context.Context, withSecrets bool) ([]t
 
 // UpsertGithubConnector creates or updates a Github connector.
 func (c *Client) UpsertGithubConnector(ctx context.Context, connector types.GithubConnector) error {
-	githubConnector, ok := connector.(*types.GithubConnectorV3)
+	githubConnector, ok := connector.(*types.GithubConnectorV4)
 	if !ok {
 		return trace.BadParameter("invalid type %T", connector)
 	}

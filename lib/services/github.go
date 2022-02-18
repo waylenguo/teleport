@@ -33,7 +33,7 @@ func UnmarshalGithubConnector(bytes []byte) (types.GithubConnector, error) {
 	}
 	switch h.Version {
 	case types.V3:
-		var c types.GithubConnectorV3
+		var c types.GithubConnectorV4
 		if err := utils.FastUnmarshal(bytes, &c); err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -58,7 +58,7 @@ func MarshalGithubConnector(githubConnector types.GithubConnector, opts ...Marsh
 	}
 
 	switch githubConnector := githubConnector.(type) {
-	case *types.GithubConnectorV3:
+	case *types.GithubConnectorV4:
 		if !cfg.PreserveResourceID {
 			// avoid modifying the original object
 			// to prevent unexpected data races

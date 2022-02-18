@@ -1825,12 +1825,12 @@ service AuthService {
     rpc DeleteSAMLConnector(types.ResourceRequest) returns (google.protobuf.Empty);
 
     // GetGithubConnector gets a Github connector resource by name.
-    rpc GetGithubConnector(types.ResourceWithSecretsRequest) returns (types.GithubConnectorV3);
+    rpc GetGithubConnector(types.ResourceWithSecretsRequest) returns (types.GithubConnectorV4);
     // GetGithubConnectors gets all current Github connector resources.
     rpc GetGithubConnectors(types.ResourcesWithSecretsRequest)
-        returns (types.GithubConnectorV3List);
+        returns (types.GithubConnectorV4List);
     // UpsertGithubConnector upserts a Github connector in a backend.
-    rpc UpsertGithubConnector(types.GithubConnectorV3) returns (google.protobuf.Empty);
+    rpc UpsertGithubConnector(types.GithubConnectorV4) returns (google.protobuf.Empty);
     // DeleteGithubConnector deletes an existing Github connector in a backend by name.
     rpc DeleteGithubConnector(types.ResourceRequest) returns (google.protobuf.Empty);
 

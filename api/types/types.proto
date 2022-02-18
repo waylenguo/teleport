@@ -2586,8 +2586,8 @@ message AsymmetricKeyPair {
     string Cert = 2 [ (gogoproto.jsontag) = "cert" ];
 }
 
-// GithubConnectorV3 represents a Github connector.
-message GithubConnectorV3 {
+// GithubConnectorV4 represents a Github connector.
+message GithubConnectorV4 {
     // Kind is a resource kind.
     string Kind = 1 [ (gogoproto.jsontag) = "kind" ];
     // SubKind is an optional resource sub kind, used in some resources.
@@ -2597,17 +2597,17 @@ message GithubConnectorV3 {
     // Metadata holds resource metadata.
     Metadata Metadata = 4 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "metadata" ];
     // Spec is an Github connector specification.
-    GithubConnectorSpecV3 Spec = 5 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
+    GithubConnectorSpecV4 Spec = 5 [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "spec" ];
 }
 
-// GithubConnectorV3List is a list of Github connectors.
-message GithubConnectorV3List {
+// GithubConnectorV4List is a list of Github connectors.
+message GithubConnectorV4List {
     // GithubConnectors is a list of Github connectors.
-    repeated GithubConnectorV3 GithubConnectors = 1;
+    repeated GithubConnectorV4 GithubConnectors = 1;
 }
 
-// GithubConnectorSpecV3 is a Github connector specification.
-message GithubConnectorSpecV3 {
+// GithubConnectorSpecV4 is a Github connector specification.
+message GithubConnectorSpecV4 {
     // ClientID is the Github OAuth app client ID.
     string ClientID = 1 [ (gogoproto.jsontag) = "client_id" ];
     // ClientSecret is the Github OAuth app client secret.
