@@ -208,11 +208,11 @@ func (a *Server) validateGithubAuthCallback(q url.Values) (*githubAuthResponse, 
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	if len(connector.GetTeamsToLogins()) == 0 {
-		logger.Warnf("Github connector %q has empty teams_to_logins mapping, cannot populate claims.",
+	if len(connector.GetTeamsToRoles()) == 0 {
+		logger.Warnf("Github connector %q has empty teams_to_roles mapping, cannot populate claims.",
 			connector.GetName())
 		return nil, trace.BadParameter(
-			"connector %q has empty teams_to_logins mapping", connector.GetName())
+			"connector %q has empty teams_to_roles mapping", connector.GetName())
 	}
 	client, err := a.getGithubOAuth2Client(connector)
 	if err != nil {
@@ -340,19 +340,22 @@ func (a *Server) calculateGithubUser(connector types.GithubConnector, claims *ty
 		username:      claims.Username,
 	}
 
-	// Calculate logins, kubegroups, roles, and traits.
-	p.logins, p.kubeGroups, p.kubeUsers = connector.MapClaims(*claims)
+	// Calculate roles, kubegroups, roles, and traits.
+	p.roles, p.kubeGroups, p.kubeUsers = connector.MapClaims(*claims)
 	if len(p.logins) == 0 {
 		return nil, trace.BadParameter(
 			"user %q does not belong to any teams configured in %q connector",
 			claims.Username, connector.GetName())
 	}
-	p.roles = p.logins
 	p.traits = map[string][]string{
 		teleport.TraitLogins:     []string{p.username},
 		teleport.TraitKubeGroups: p.kubeGroups,
 		teleport.TraitKubeUsers:  p.kubeUsers,
 		teleport.TraitTeams:      claims.Teams,
+	}
+
+	if connector.GetVersion() == types.V3 {
+		p.logins = p.roles
 	}
 
 	// Pick smaller for role: session TTL from role or requested TTL.

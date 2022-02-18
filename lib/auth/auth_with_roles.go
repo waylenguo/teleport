@@ -2169,12 +2169,12 @@ func (a *ServerWithRoles) CreateGithubConnector(connector types.GithubConnector)
 }
 
 func (a *ServerWithRoles) checkGithubConnector(connector types.GithubConnector) error {
-	mapping := connector.GetTeamsToLogins()
+	mapping := connector.GetTeamsToRoles()
 	for _, team := range mapping {
 		if len(team.KubeUsers) != 0 || len(team.KubeGroups) != 0 {
 			return trace.BadParameter("since 6.0 teleport uses teams_to_logins to reference a role, use it instead of local kubernetes_users and kubernetes_groups ")
 		}
-		for _, localRole := range team.Logins {
+		for _, localRole := range team.Roles {
 			_, err := a.GetRole(context.TODO(), localRole)
 			if err != nil {
 				if trace.IsNotFound(err) {

@@ -356,20 +356,20 @@ func (c *githubCollection) resources() (r []types.Resource) {
 }
 
 func (c *githubCollection) writeText(w io.Writer) error {
-	t := asciitable.MakeTable([]string{"Name", "Teams To Logins"})
+	t := asciitable.MakeTable([]string{"Name", "Teams To Roles"})
 	for _, conn := range c.connectors {
-		t.AddRow([]string{conn.GetName(), formatTeamsToLogins(
-			conn.GetTeamsToLogins())})
+		t.AddRow([]string{conn.GetName(), formatTeamsToRoles(
+			conn.GetTeamsToRoles())})
 	}
 	_, err := t.AsBuffer().WriteTo(w)
 	return trace.Wrap(err)
 }
 
-func formatTeamsToLogins(mappings []types.TeamMapping) string {
+func formatTeamsToRoles(mappings []types.TeamRolesMapping) string {
 	var result []string
 	for _, m := range mappings {
 		result = append(result, fmt.Sprintf("@%v/%v: %v",
-			m.Organization, m.Team, strings.Join(m.Logins, ", ")))
+			m.Organization, m.Team, strings.Join(m.Roles, ", ")))
 	}
 	return strings.Join(result, ", ")
 }

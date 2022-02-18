@@ -42,10 +42,10 @@ type GithubConnector interface {
 	GetRedirectURL() string
 	// SetRedirectURL sets the connector redirect URL
 	SetRedirectURL(string)
-	// GetTeamsToLogins returns the mapping of Github teams to allowed logins
-	GetTeamsToLogins() []TeamMapping
-	// SetTeamsToLogins sets the mapping of Github teams to allowed logins
-	SetTeamsToLogins([]TeamMapping)
+	// GetTeamsToRoles returns the mapping of Github teams to allowed roles
+	GetTeamsToRoles() []TeamRolesMapping
+	// SetTeamsToRoles sets the mapping of Github teams to allowed roles
+	SetTeamsToRoles([]TeamRolesMapping)
 	// MapClaims returns the list of allows logins based on the retrieved claims
 	// returns list of logins and kubernetes groups
 	MapClaims(GithubClaims) (logins []string, kubeGroups []string, kubeUsers []string)
@@ -152,7 +152,10 @@ func (c *GithubConnectorV3) WithoutSecrets() Resource {
 // setStaticFields sets static resource header and metadata fields.
 func (c *GithubConnectorV3) setStaticFields() {
 	c.Kind = KindGithubConnector
-	c.Version = V3
+
+	if c.Version != V3 && c.Version != V4 {
+		c.Version = V4
+	}
 }
 
 // CheckAndSetDefaults verifies the connector is valid and sets some defaults
@@ -194,14 +197,44 @@ func (c *GithubConnectorV3) SetRedirectURL(redirectURL string) {
 	c.Spec.RedirectURL = redirectURL
 }
 
-// GetTeamsToLogins returns the connector team membership mappings
-func (c *GithubConnectorV3) GetTeamsToLogins() []TeamMapping {
-	return c.Spec.TeamsToLogins
+// GetTeamsToRoles returns the connector team membership mappings
+func (c *GithubConnectorV3) GetTeamsToRoles() []TeamRolesMapping {
+	if c.Version == V4 {
+		return c.Spec.TeamsToRoles
+	} else {
+		var mappings []TeamRolesMapping
+		for _, mapping := range c.Spec.TeamsToLogins {
+			mappings = append(mappings, TeamRolesMapping{
+				Organization: mapping.Organization,
+				Team:         mapping.Team,
+				Roles:        mapping.Logins,
+				KubeGroups:   mapping.KubeGroups,
+				KubeUsers:    mapping.KubeUsers,
+			})
+		}
+
+		return mappings
+	}
 }
 
-// SetTeamsToLogins sets the connector team membership mappings
-func (c *GithubConnectorV3) SetTeamsToLogins(teamsToLogins []TeamMapping) {
-	c.Spec.TeamsToLogins = teamsToLogins
+// SetTeamsToRoles sets the connector team membership mappings
+func (c *GithubConnectorV3) SetTeamsToRoles(teamsToRoles []TeamRolesMapping) {
+	if c.Version == V4 {
+		c.Spec.TeamsToRoles = teamsToRoles
+	} else {
+		var mappings []TeamMapping
+		for _, mapping := range teamsToRoles {
+			mappings = append(mappings, TeamMapping{
+				Organization: mapping.Organization,
+				Team:         mapping.Team,
+				Logins:       mapping.Roles,
+				KubeGroups:   mapping.KubeGroups,
+				KubeUsers:    mapping.KubeUsers,
+			})
+		}
+
+		c.Spec.TeamsToLogins = mappings
+	}
 }
 
 // GetDisplay returns the connector display name
@@ -215,10 +248,10 @@ func (c *GithubConnectorV3) SetDisplay(display string) {
 }
 
 // MapClaims returns a list of logins based on the provided claims,
-// returns a list of logins and list of kubernetes groups
+// returns a list of roles and list of kubernetes groups
 func (c *GithubConnectorV3) MapClaims(claims GithubClaims) ([]string, []string, []string) {
-	var logins, kubeGroups, kubeUsers []string
-	for _, mapping := range c.GetTeamsToLogins() {
+	var roles, kubeGroups, kubeUsers []string
+	for _, mapping := range c.GetTeamsToRoles() {
 		teams, ok := claims.OrganizationToTeams[mapping.Organization]
 		if !ok {
 			// the user does not belong to this organization
@@ -227,11 +260,11 @@ func (c *GithubConnectorV3) MapClaims(claims GithubClaims) ([]string, []string, 
 		for _, team := range teams {
 			// see if the user belongs to this team
 			if team == mapping.Team {
-				logins = append(logins, mapping.Logins...)
+				roles = append(roles, mapping.Roles...)
 				kubeGroups = append(kubeGroups, mapping.KubeGroups...)
 				kubeUsers = append(kubeUsers, mapping.KubeUsers...)
 			}
 		}
 	}
-	return utils.Deduplicate(logins), utils.Deduplicate(kubeGroups), utils.Deduplicate(kubeUsers)
+	return utils.Deduplicate(roles), utils.Deduplicate(kubeGroups), utils.Deduplicate(kubeUsers)
 }

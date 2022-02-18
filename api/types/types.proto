@@ -2619,6 +2619,9 @@ message GithubConnectorSpecV3 {
         [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "teams_to_logins" ];
     // Display is the connector display name.
     string Display = 5 [ (gogoproto.jsontag) = "display" ];
+    // TeamsToRoles maps Github team memberships onto allowed roles.
+    repeated TeamRolesMapping TeamsToRoles = 6
+        [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "teams_to_roles" ];
 }
 
 // TeamMapping represents a single team membership mapping.
@@ -2629,6 +2632,20 @@ message TeamMapping {
     string Team = 2 [ (gogoproto.jsontag) = "team" ];
     // Logins is a list of allowed logins for this org/team.
     repeated string Logins = 3 [ (gogoproto.jsontag) = "logins,omitempty" ];
+    // KubeGroups is a list of allowed kubernetes groups for this org/team.
+    repeated string KubeGroups = 4 [ (gogoproto.jsontag) = "kubernetes_groups,omitempty" ];
+    // KubeUsers is a list of allowed kubernetes users to impersonate for this org/team.
+    repeated string KubeUsers = 5 [ (gogoproto.jsontag) = "kubernetes_users,omitempty" ];
+}
+
+// TeamRolesMapping represents a single team membership mapping.
+message TeamRolesMapping {
+    // Organization is a Github organization a user belongs to.
+    string Organization = 1 [ (gogoproto.jsontag) = "organization" ];
+    // Team is a team within the organization a user belongs to.
+    string Team = 2 [ (gogoproto.jsontag) = "team" ];
+    // Roles is a list of allowed logins for this org/team.
+    repeated string Roles = 3 [ (gogoproto.jsontag) = "roles,omitempty" ];
     // KubeGroups is a list of allowed kubernetes groups for this org/team.
     repeated string KubeGroups = 4 [ (gogoproto.jsontag) = "kubernetes_groups,omitempty" ];
     // KubeUsers is a list of allowed kubernetes users to impersonate for this org/team.
