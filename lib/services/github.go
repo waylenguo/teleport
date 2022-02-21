@@ -32,7 +32,7 @@ func UnmarshalGithubConnector(bytes []byte) (types.GithubConnector, error) {
 		return nil, trace.Wrap(err)
 	}
 	switch h.Version {
-	case types.V3:
+	case types.V3, types.V4:
 		var c types.GithubConnectorV4
 		if err := utils.FastUnmarshal(bytes, &c); err != nil {
 			return nil, trace.Wrap(err)
