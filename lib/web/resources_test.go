@@ -78,7 +78,8 @@ spec:
   display: ""
   redirect_url: ""
   teams_to_logins: null
-version: v3
+  teams_to_roles: null
+version: v4
 `
 	githubConn, err := types.NewGithubConnector("githubName", types.GithubConnectorSpecV4{})
 	require.NoError(t, err)
