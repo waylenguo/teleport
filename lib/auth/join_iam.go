@@ -36,6 +36,8 @@ import (
 	"github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/lib/utils/aws"
 
+	awssdk "github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/gravitational/trace"
@@ -343,7 +345,7 @@ func createSignedStsIdentityRequest(challenge string) ([]byte, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	stsService := sts.New(sess)
+	stsService := sts.New(sess, awssdk.NewConfig().WithSTSRegionalEndpoint(endpoints.RegionalSTSEndpoint))
 	req, _ := stsService.GetCallerIdentityRequest(&sts.GetCallerIdentityInput{})
 	// set challenge header
 	req.HTTPRequest.Header.Set(challengeHeaderKey, challenge)
@@ -358,5 +360,6 @@ func createSignedStsIdentityRequest(challenge string) ([]byte, error) {
 	if err := req.HTTPRequest.Write(&signedRequest); err != nil {
 		return nil, trace.Wrap(err)
 	}
+	println("NIC", string(signedRequest.Bytes()))
 	return signedRequest.Bytes(), nil
 }
