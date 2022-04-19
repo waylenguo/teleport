@@ -705,7 +705,7 @@ func New(addr utils.NetAddr,
 	})
 
 	if s.createHostUser {
-		users, err := srv.NewHostUsers(ctx)
+		users, err := srv.NewHostUsers(ctx, s.ID())
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
