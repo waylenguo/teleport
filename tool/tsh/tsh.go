@@ -1667,11 +1667,15 @@ func showAppsAsText(apps []types.Application, active []tlsca.RouteToApp, verbose
 			}
 			desc := app.GetDescription()
 			addr := app.GetPublicAddr()
+			protocol := "HTTP"
+			if app.IsTCP() {
+				protocol = "TCP"
+			}
 			labels := sortedLabels(app.GetAllLabels())
-			rows = append(rows, []string{name, desc, addr, labels})
+			rows = append(rows, []string{name, desc, protocol, addr, labels})
 		}
 		t := asciitable.MakeTableWithTruncatedColumn(
-			[]string{"Application", "Description", "Public Address", "Labels"}, rows, "Labels")
+			[]string{"Application", "Description", "Type", "Public Address", "Labels"}, rows, "Labels")
 		fmt.Println(t.AsBuffer().String())
 	}
 }

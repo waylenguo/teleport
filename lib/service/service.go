@@ -2949,6 +2949,13 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		log.Info("Web UI is disabled.")
 	}
 
+	// Register ALPN handler that will be accepting connections for plain
+	// TCP applications.
+	alpnRouter.Add(alpnproxy.HandlerDecs{
+		MatchFunc: alpnproxy.MatchByProtocol(alpncommon.ProtocolTCP),
+		Handler:   webHandler.HandleConnection,
+	})
+
 	sshProxy, err := regular.New(cfg.Proxy.SSHAddr,
 		cfg.Hostname,
 		[]ssh.Signer{conn.ServerIdentity.KeySigner},
