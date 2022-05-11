@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/breaker"
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
@@ -559,6 +560,7 @@ func (a *TestAuthServer) NewRemoteClient(identity TestIdentity, addr net.Addr, p
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 }
 
@@ -763,6 +765,7 @@ func (t *TestTLSServer) NewClientFromWebSession(sess types.WebSession) (*Client,
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 }
 
@@ -804,6 +807,7 @@ func (t *TestTLSServer) CloneClient(clt *Client) *Client {
 		Credentials: []client.Credentials{
 			client.LoadTLS(clt.Config()),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 	if err != nil {
 		panic(err)
@@ -824,6 +828,7 @@ func (t *TestTLSServer) NewClientWithCert(clientCert tls.Certificate) *Client {
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 	if err != nil {
 		panic(err)
@@ -844,6 +849,7 @@ func (t *TestTLSServer) NewClient(identity TestIdentity) (*Client, error) {
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

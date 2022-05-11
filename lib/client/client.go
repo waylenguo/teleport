@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/breaker"
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
@@ -847,6 +848,7 @@ func (proxy *ProxyClient) ConnectToAuthServiceThroughALPNSNIProxy(ctx context.Co
 			client.LoadTLS(tlsConfig),
 		},
 		ALPNSNIAuthDialClusterName: clusterName,
+		CircuitBreakerConfig:       breaker.NoopBreakerConfig(),
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -880,6 +882,7 @@ func (proxy *ProxyClient) ConnectToCluster(ctx context.Context, clusterName stri
 			Credentials: []client.Credentials{
 				client.LoadTLS(proxy.teleportClient.TLS),
 			},
+			CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 		})
 	}
 
@@ -897,6 +900,7 @@ func (proxy *ProxyClient) ConnectToCluster(ctx context.Context, clusterName stri
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
+		CircuitBreakerConfig: breaker.NoopBreakerConfig(),
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

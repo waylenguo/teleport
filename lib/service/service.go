@@ -2908,6 +2908,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				LockWatcher:          lockWatcher,
 				NodeWatcher:          nodeWatcher,
 				CertAuthorityWatcher: caWatcher,
+				CircuitBreakerConfig: process.Config.CircuitBreakerConfig,
 			})
 		if err != nil {
 			return trace.Wrap(err)
