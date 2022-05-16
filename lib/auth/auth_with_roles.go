@@ -1211,6 +1211,7 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 		if err := servers.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
+		servers = types.DeduplicateAppServers(servers)
 		resources = servers.AsResources()
 
 	case types.KindDatabaseServer:
@@ -1223,6 +1224,7 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 		if err := servers.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
+		servers = types.DeduplicateDatabaseServers(servers)
 		resources = servers.AsResources()
 
 	case types.KindKubernetesCluster:
@@ -1259,6 +1261,7 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 		if err := desktops.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
+		desktops = types.DeduplicateDesktops(desktops)
 		resources = desktops.AsResources()
 
 	default:
