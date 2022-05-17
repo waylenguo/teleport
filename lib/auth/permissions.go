@@ -307,7 +307,7 @@ func (a *authorizer) authorizeRemoteBuiltinRole(r RemoteBuiltinRole) (*Context, 
 	if r.Role != types.RoleProxy {
 		return nil, trace.AccessDenied("access denied for remote %v connecting to cluster", r.Role)
 	}
-	roles, err := services.FromSpec(
+	roles, err := services.RoleSetFromSpec(
 		string(types.RoleRemoteProxy),
 		types.RoleSpecV5{
 			Allow: types.RoleConditions{
@@ -358,11 +358,24 @@ func (a *authorizer) authorizeRemoteBuiltinRole(r RemoteBuiltinRole) (*Context, 
 	}, nil
 }
 
-// GetCheckerForBuiltinRole returns checkers for embedded builtin role
-func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordingConfig, role types.SystemRole) (services.RoleSet, error) {
+// GetCheckerForBuiltinRoles returns checkers for embedded builtin role
+func GetCheckerForBuiltinRoles(clusterName string, recConfig types.SessionRecordingConfig, roles ...types.SystemRole) (services.RoleSet, error) {
+	var definitions []types.Role
+	for _, role := range roles {
+		rd, err := definitionForBuiltinRole(clusterName, recConfig, role)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		definitions = append(definitions, rd)
+	}
+	return services.NewRoleSet(definitions...), nil
+}
+
+// definitionForBuiltinRole constructs the appropriate role definition for a given builtin role.
+func definitionForBuiltinRole(clusterName string, recConfig types.SessionRecordingConfig, role types.SystemRole) (types.Role, error) {
 	switch role {
 	case types.RoleAuth:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -373,9 +386,9 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleProvisionToken:
-		return services.FromSpec(role.String(), types.RoleSpecV5{})
+		return services.RoleFromSpec(role.String(), types.RoleSpecV5{})
 	case types.RoleNode:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -404,7 +417,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleApp:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -434,7 +447,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleDatabase:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -465,7 +478,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 		// if in recording mode, return a different set of permissions than regular
 		// mode. recording proxy needs to be able to generate host certificates.
 		if services.IsRecordAtProxy(recConfig.GetMode()) {
-			return services.FromSpec(
+			return services.RoleFromSpec(
 				role.String(),
 				types.RoleSpecV5{
 					Allow: types.RoleConditions{
@@ -528,7 +541,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 					},
 				})
 		}
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -590,7 +603,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleSignup:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -602,7 +615,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleAdmin:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Options: types.RoleOptions{
@@ -620,7 +633,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleNop:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -629,7 +642,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleKube:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -651,7 +664,7 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 				},
 			})
 	case types.RoleWindowsDesktop:
-		return services.FromSpec(
+		return services.RoleFromSpec(
 			role.String(),
 			types.RoleSpecV5{
 				Allow: types.RoleConditions{
@@ -676,11 +689,24 @@ func GetCheckerForBuiltinRole(clusterName string, recConfig types.SessionRecordi
 			})
 	}
 
-	return nil, trace.NotFound("%q is not recognized", role.String())
+	return nil, trace.NotFound("builtin role %q is not recognized", role.String())
 }
 
 func contextForBuiltinRole(r BuiltinRole, recConfig types.SessionRecordingConfig) (*Context, error) {
-	checker, err := GetCheckerForBuiltinRole(r.ClusterName, recConfig, r.Role)
+	var systemRoles []types.SystemRole
+	if r.Role == types.RoleInstance {
+		// instance certs encode multiple system roles in a separate field
+		systemRoles = r.AdditionalSystemRoles
+		if len(systemRoles) == 0 {
+			// note: previous parsing skipped unknown roles for this field, so its possible that some
+			// system roles were defined, but they were all unknown to us.
+			return nil, trace.BadParameter("cannot create instance context, no additional system roles recognized")
+		}
+	} else {
+		// all other certs encode a single system role
+		systemRoles = []types.SystemRole{r.Role}
+	}
+	checker, err := GetCheckerForBuiltinRoles(r.ClusterName, recConfig, systemRoles...)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -853,8 +879,13 @@ func (i WrapIdentity) GetIdentity() tlsca.Identity {
 
 // BuiltinRole is the role of the Teleport service.
 type BuiltinRole struct {
-	// Role is the builtin role this username is associated with
+	// Role is the primary builtin role this username is associated with
 	Role types.SystemRole
+
+	// AdditionalSystemRoles is a collection of additional system roles held by
+	// this identity (only currently used by identities with RoleInstance as their
+	// primary role).
+	AdditionalSystemRoles types.SystemRoles
 
 	// Username is for authentication tracking purposes
 	Username string
@@ -866,15 +897,10 @@ type BuiltinRole struct {
 	Identity tlsca.Identity
 }
 
-// IsServer returns true if the role is one of the builtin server roles.
+// IsServer returns true if the primary role is either RoleInstance, or one of
+// the local service roles (e.g. proxy).
 func (r BuiltinRole) IsServer() bool {
-	return r.Role == types.RoleProxy ||
-		r.Role == types.RoleNode ||
-		r.Role == types.RoleAuth ||
-		r.Role == types.RoleApp ||
-		r.Role == types.RoleKube ||
-		r.Role == types.RoleDatabase ||
-		r.Role == types.RoleWindowsDesktop
+	return r.Role == types.RoleInstance || r.Role.IsLocalService()
 }
 
 // GetServerID extracts the identity from the full name. The username

@@ -380,6 +380,9 @@ var (
 	// HeartbeatCheckPeriod is a period between heartbeat status checks
 	HeartbeatCheckPeriod = 5 * time.Second
 
+	// MediumResPollingPeriod is the default medium-res polling period.
+	MediumResPollingPeriod = time.Minute
+
 	// LowResPollingPeriod is a default low resolution polling period
 	LowResPollingPeriod = 600 * time.Second
 

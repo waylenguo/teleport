@@ -181,6 +181,20 @@ message HostCertsRequest {
     types.Rotation Rotation = 9 [ (gogoproto.jsontag) = "rotation,omitempty" ];
     // NoCache is argument that only local callers can supply to bypass cache
     bool NoCache = 10 [ (gogoproto.jsontag) = "-" ];
+    // SystemRoles is the set of system roles held by the instance
+    // (note: if the cert uses the `Role` field then it is a single-service cert,
+    // whereas if it uses the `SystemRoles` field, the cert if shared across
+    // services within the instance).
+    repeated string SystemRoles = 11 [
+        (gogoproto.jsontag) = "system_roles,omitempty",
+        (gogoproto.casttype) = "github.com/gravitational/teleport/api/types.SystemRole"
+    ];
+    // UnstableSystemRoleAssertionID is not a stable part of the public API. Used by
+    // older instances to requisition a multi-role cert by individually proving which
+    // system roles are held.
+    // DELETE IN: 12.0 (deprecated in v11, but required for back-compat with v10 clients)
+    string UnstableSystemRoleAssertionID = 12
+        [ (gogoproto.jsontag) = "system_role_assertion_id,omitempty" ];
 }
 
 // UserCertRequest specifies certificate-generation parameters
@@ -1636,8 +1650,118 @@ message PresenceMFAChallengeSend {
     }
 }
 
+// UnstableSystemRoleAssertion is not a stable part of the public API. Used by older instances
+// to prove that they hold a given system role.
+// DELETE IN: 12.0 (deprecated in v11, but required for back-compat with v10 clients)
+message UnstableSystemRoleAssertion {
+    string ServerID = 1 [ (gogoproto.jsontag) = "server_id,omitempty" ];
+    string AssertionID = 2 [ (gogoproto.jsontag) = "assertion_id,omitempty" ];
+    string SystemRole = 3 [
+        (gogoproto.jsontag) = "system_role,omitempty",
+        (gogoproto.casttype) = "github.com/gravitational/teleport/api/types.SystemRole"
+    ];
+}
+
+// UnstableSystemRoleAssertionSet is not a stable part of the public API. Records the sum of system
+// role assertions provided by a given instance.
+// DELETE IN: 12.0 (deprecated in v11, but required for back-compat with v10 clients)
+message UnstableSystemRoleAssertionSet {
+    string ServerID = 1 [ (gogoproto.jsontag) = "server_id,omitempty" ];
+    string AssertionID = 2 [ (gogoproto.jsontag) = "assertion_id,omitempty" ];
+    repeated string SystemRoles = 3 [
+        (gogoproto.jsontag) = "system_roles,omitempty",
+        (gogoproto.casttype) = "github.com/gravitational/teleport/api/types.SystemRole"
+    ];
+}
+
+// UpstreamInventoryOneOf is the upstream message for the inventory control stream,
+// sent from teleport instances to the auth server.
+message UpstreamInventoryOneOf {
+    oneof Msg {
+        // Hello is the first message sent up the control stream.
+        UpstreamInventoryHello Hello = 1;
+        // Heartbeat advertises instance status/liveness.
+        InventoryHeartbeat Heartbeat = 2;
+        // UpstreamInventoryPong is a response to a pong (used for testing/debug).
+        UpstreamInventoryPong Pong = 3;
+    }
+}
+
+// DownstreamInventoryOneOf is the downstream message for the inventory control stream,
+// sent from auth servers to teleport instances.
+message DownstreamInventoryOneOf {
+    oneof Msg {
+        // Hello is the first message sent down the control stream.
+        DownstreamInventoryHello Hello = 1;
+        // Ping triggers an upstream pong (used for testing/debug).
+        DownstreamInventoryPing Ping = 2;
+    }
+}
+
+// DownstreamInventoryPing is sent down the inventory control stream for testing/debug
+// purposes.
+message DownstreamInventoryPing { uint64 ID = 1; }
+
+// UpstreamInventoryPong is sent up the inventory control stream in response to a downstream
+// ping (used for testing/debug purposes).
+message UpstreamInventoryPong { uint64 ID = 1; }
+
+// UpstreamInventoryHello is the hello message sent up the inventory control stream.
+message UpstreamInventoryHello {
+    // Version advertises the teleport version of the instance.
+    string Version = 1;
+    // ServerID advertises the server ID of the instance.
+    string ServerID = 2;
+    // Services advertises the currently live services of the instance. note: this is
+    // distinct from the SystemRoles associated with a certificate in that a service may
+    // hold a system role that is not currently in use if it was granted that role by
+    // its auth token. i.e. Services is the subset of SystemRoles that are currently
+    // active.
+    repeated string Services = 3
+        [ (gogoproto.casttype) = "github.com/gravitational/teleport/api/types.SystemRole" ];
+
+    // TODO(fspmarshall): look into what other info can safely be stated here once, instead of
+    // being repeatedly announced (e.g. addrs, static labels, etc).
+}
+
+// DownstreamInventoryHello is the hello message sent down the inventory control stream.
+message DownstreamInventoryHello {
+    // Version advertises the version of the auth server.
+    string Version = 1;
+    // ServerID advertises the server ID of the auth server.
+    string ServerID = 2;
+}
+
+// InventoryHeartbeat announces information about instance state.
+message InventoryHeartbeat {
+    // SSHServer is a complete ssh server spec to be heartbeated (note: the full spec is heartbeated
+    // in the interest of simple conversion from the old logic of heartbeating via UpsertNode, but
+    // we should be able to cut down on network usage fairly significantly by moving static values
+    // to the hello message and only heartbeating dynamic values here).
+    types.ServerV2 SSHServer = 1;
+}
+
+message InventoryStatusRequest { bool Connected = 1; }
+
+message InventoryStatusSummary {
+    repeated UpstreamInventoryHello Connected = 1 [ (gogoproto.nullable) = false ];
+}
+
+message InventoryPingRequest { string ServerID = 1; }
+
+message InventoryPingResponse { int64 Duration = 1 [ (gogoproto.casttype) = "time.Duration" ]; }
+
 // AuthService is authentication/authorization service implementation
 service AuthService {
+    // InventoryControlStream is the per-instance stream used to advertise teleport instance
+    // presence/version/etc to the auth server.
+    rpc InventoryControlStream(stream UpstreamInventoryOneOf)
+        returns (stream DownstreamInventoryOneOf);
+
+    rpc GetInventoryStatus(InventoryStatusRequest) returns (InventoryStatusSummary);
+
+    rpc PingInventory(InventoryPingRequest) returns (InventoryPingResponse);
+
     // MaintainSessionPresence establishes a channel used to continously verify the presence for a
     // session.
     rpc MaintainSessionPresence(stream PresenceMFAChallengeSend)
@@ -1645,9 +1769,6 @@ service AuthService {
 
     // CreateSessionTracker creates a new session tracker resource.
     rpc CreateSessionTracker(CreateSessionTrackerRequest) returns (types.SessionTrackerV1);
-
-    // UpsertSessionTracker upserts a session tracker resource.
-    rpc UpsertSessionTracker(types.SessionTrackerV1) returns (google.protobuf.Empty);
 
     // GetSessionTracker fetches a session tracker resource.
     rpc GetSessionTracker(GetSessionTrackerRequest) returns (types.SessionTrackerV1);
@@ -2137,4 +2258,9 @@ service AuthService {
 
     // ListResources retrieves a paginated list of resources.
     rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+
+    // UnstableAssertSystemRole is not a stable part of the public API. Used by older
+    // instances to prove that they hold a given system role.
+    // DELETE IN: 12.0 (deprecated in v11, but required for back-compat with v10 clients)
+    rpc UnstableAssertSystemRole(UnstableSystemRoleAssertion) returns (google.protobuf.Empty);
 }

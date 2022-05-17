@@ -22,9 +22,15 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/client/proto"
+	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/defaults"
+	"github.com/gravitational/teleport/lib/inventory"
 	"github.com/gravitational/teleport/lib/services"
+	"github.com/gravitational/teleport/lib/utils"
+	"github.com/gravitational/teleport/lib/utils/interval"
 
 	"github.com/gravitational/trace"
 	"github.com/gravitational/trace/trail"
@@ -33,6 +39,260 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// HeartbeatI abstracts over the basic interfact of Heartbeat and HeartbeatV2. This can be removed
+// once we've fully transitioned to HeartbeatV2.
+type HeartbeatI interface {
+	Run() error
+	Close() error
+}
+
+// SSHServerHeatbeatConfig configures the HeartbeatV2 for an ssh server.
+type SSHServerHeartbeatConfig struct {
+	// InventoryHandle is used to send heartbeats.
+	InventoryHandle inventory.DownstreamHandle
+	// GetServer gets the latest server spec.
+	GetServer func() *types.ServerV2
+	// Announcer is a fallback used to perform basic upsert-style heartbeats
+	// if the control stream is unavailable (optional).
+	Announcer auth.Announcer
+	// OnHeartbeat is a per-attempt callback (optional).
+	OnHeartbeat func(error)
+	// AnnounceInterval is the interval at which heartbeats are attempted (optional).
+	AnnounceInterval time.Duration
+	// PollInterval is the interval at which checks for change are performed (optional).
+	PollInterval time.Duration
+}
+
+func (c *SSHServerHeartbeatConfig) CheckAndSetDefaults() error {
+	if c.InventoryHandle == nil {
+		return trace.BadParameter("missing required parameter InventoryHandle for ssh heartbeat")
+	}
+	if c.GetServer == nil {
+		return trace.BadParameter("missing required parameter GetServer for ssh heartbeat")
+	}
+	if c.AnnounceInterval == 0 {
+		// default to 2/3rds of the default server expiry.  since we use the "seventh jitter"
+		// for our periodics, that translates to an average interval of ~6m, a slight increase
+		// from the average of ~5m30s that was used for V1 ssh server heartbeats.
+		c.AnnounceInterval = 2 * (apidefaults.ServerAnnounceTTL / 3)
+	}
+	if c.PollInterval == 0 {
+		c.PollInterval = defaults.HeartbeatCheckPeriod
+	}
+	return nil
+}
+
+func NewSSHServerHeartbeat(cfg SSHServerHeartbeatConfig) (*HeartbeatV2, error) {
+	if err := cfg.CheckAndSetDefaults(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	ctx, cancel := context.WithCancel(cfg.InventoryHandle.CloseContext())
+	return &HeartbeatV2{
+		inner: &sshServerHeartbeatV2{
+			getServer: cfg.GetServer,
+			announcer: cfg.Announcer,
+		},
+		onHeartbeatInner: cfg.OnHeartbeat,
+		handle:           cfg.InventoryHandle,
+		announceInterval: cfg.AnnounceInterval,
+		pollInterval:     cfg.PollInterval,
+		closeContext:     ctx,
+		cancel:           cancel,
+	}, nil
+}
+
+// HeartbeatV2 heartbeats presence via the inventory control stream.
+type HeartbeatV2 struct {
+	handle inventory.DownstreamHandle
+	inner  heartbeatV2
+
+	announceInterval time.Duration
+	pollInterval     time.Duration
+
+	onHeartbeatInner func(error)
+
+	closeContext context.Context
+	cancel       context.CancelFunc
+}
+
+func (h *HeartbeatV2) run() {
+	// note: these errors are never actually displayed, but onHeartbeat expects an error,
+	// se we we just allocate something reasonably descriptive once.
+	announceFailed := trace.Errorf("control stream heartbeat failed (variant=%T)", h.inner)
+	fallbackFailed := trace.Errorf("upsert fallback heartbeat failed (variant=%T)", h.inner)
+
+	// set up interval for forced announcement (i.e. heartbeat even if state is unchanged).
+	announce := interval.New(interval.Config{
+		FirstDuration: utils.HalfJitter(h.announceInterval),
+		Duration:      h.announceInterval,
+		Jitter:        utils.NewSeventhJitter(),
+	})
+	defer announce.Stop()
+
+	// set up interval for polling the inner heartbeat impl for changes.
+	poll := interval.New(interval.Config{
+		FirstDuration: utils.HalfJitter(h.pollInterval),
+		Duration:      h.pollInterval,
+		Jitter:        utils.NewSeventhJitter(),
+	})
+	defer poll.Stop()
+
+	// backoffFallback approximately replicates the ~1m backoff used by heartbeat V1 when an announce
+	// failes. This can be removed once we remove the fallback announce operation, since control-stream
+	// based heartbeats inherit backoff from the stream handle and don't need special backoff.
+	var backoffFallback time.Time
+
+	// shouldAnnounce is set to true if announce interval elapses, or if polling informs us of a change.
+	// it stays true until a *successful* announce. the value of this variable is preserved when going
+	// between the inner control stream based announce loop and the outer upsert based announce loop.
+	// the initial value is false to give the control stream a chance to become available.  the first
+	// call to poll always returns true, so we still heartbeat within a few seconds of startup regardless.
+	var shouldAnnounce bool
+
+	log.Info("debug -> starting heartbeat loop.")
+
+Outer:
+	for {
+		if shouldAnnounce && time.Now().After(backoffFallback) {
+			log.Info("debug -> performing fallback announce.")
+			if ok := h.inner.FallbackAnnounce(h.closeContext); ok {
+				// reset announce interval and state on successful announce
+				announce.Reset()
+				shouldAnnounce = false
+				h.onHeartbeat(nil)
+			} else {
+				// announce failed, enter a backoff state.
+				backoffFallback = time.Now().Add(utils.SeventhJitter(time.Minute))
+				h.onHeartbeat(fallbackFailed)
+			}
+		}
+		// outer select waits for a sender to become available. until one does, announce/poll
+		// events are handled via the FallbackAnnounce method which doesn't rely on having a
+		// healthy sender stream.
+		select {
+		case sender := <-h.handle.Sender():
+			log.Info("debug -> control stream sender acquired.")
+			// poll immediately when sender becomes available.
+			if h.inner.Poll() {
+				shouldAnnounce = true
+			}
+			for {
+				if shouldAnnounce {
+					log.Info("debug -> performing control stream announce.")
+					if ok := h.inner.Announce(h.closeContext, sender); ok {
+						// reset announce interval and state on successful announce
+						announce.Reset()
+						shouldAnnounce = false
+						h.onHeartbeat(nil)
+					} else {
+						h.onHeartbeat(announceFailed)
+					}
+				}
+				// inner select is identical to outer select except that announcements are
+				// performed by the primary Announce method, since we have access to the
+				// sender within this scope.
+				select {
+				case <-sender.Done():
+					// sender closed, break into the outer loop and wait for a new sender
+					// to be available.
+					continue Outer
+				case <-announce.Next():
+					shouldAnnounce = true
+				case <-poll.Next():
+					if h.inner.Poll() {
+						shouldAnnounce = true
+					}
+				case <-h.closeContext.Done():
+					return
+				}
+			}
+		case <-announce.Next():
+			shouldAnnounce = true
+		case <-poll.Next():
+			if h.inner.Poll() {
+				shouldAnnounce = true
+			}
+		case <-h.closeContext.Done():
+			return
+		}
+	}
+}
+
+func (h *HeartbeatV2) Run() error {
+	log.Info("debug -> starting heartbeat v2 goroutine.")
+	h.run()
+	return nil
+}
+
+func (h *HeartbeatV2) Close() error {
+	h.cancel()
+	return nil
+}
+
+func (h *HeartbeatV2) onHeartbeat(err error) {
+	if h.onHeartbeatInner == nil {
+		return
+	}
+	h.onHeartbeatInner(err)
+}
+
+// heartbeatV2 is the pluggable core of the HeartbeatV2 type. A service needing to use HeartbeatV2 should
+// have a corresponding implementation.
+type heartbeatV2 interface {
+	// Poll is used to check for changes since last *successful* heartbeat (note: Poll should also
+	// return true if no heartbeat has been successfully executed yet).
+	Poll() (changed bool)
+	// FallbackAnnounce is called if a heartbeat is needed but the inventory control stream is
+	// unavailable. In theory this is probably only relevant for cases where the auth has been
+	// downgraded to an earlier version than it should have been, but its still preferable to
+	// make an effort to heartbeat in that case, so we're including it for now.
+	FallbackAnnounce(ctx context.Context) (ok bool)
+	// Announce attempts to heartbeat via the inventory control stream.
+	Announce(ctx context.Context, sender inventory.DownstreamSender) (ok bool)
+}
+
+// sshServerHeartbeatV2 is the heartbeatV2 implementation for ssh servers.
+type sshServerHeartbeatV2 struct {
+	getServer   func() *types.ServerV2
+	announcer   auth.Announcer
+	prev        *types.ServerV2
+	lastWarning time.Time
+}
+
+func (h *sshServerHeartbeatV2) Poll() (changed bool) {
+	if h.prev == nil {
+		return true
+	}
+	return services.CompareServers(h.getServer(), h.prev) == services.Different
+}
+
+func (h *sshServerHeartbeatV2) FallbackAnnounce(ctx context.Context) (ok bool) {
+	if h.announcer == nil {
+		return false
+	}
+	server := h.getServer()
+	_, err := h.announcer.UpsertNode(ctx, server)
+	if err != nil {
+		log.Warnf("Failed to perform fallback heartbeat for ssh server: %v", err)
+		return false
+	}
+	h.prev = server
+	return true
+}
+
+func (h *sshServerHeartbeatV2) Announce(ctx context.Context, sender inventory.DownstreamSender) (ok bool) {
+	server := h.getServer()
+	err := sender.Send(ctx, proto.InventoryHeartbeat{
+		SSHServer: h.getServer(),
+	})
+	if err != nil {
+		log.Warnf("Failed to perform inventory heartbeat for ssh server: %v", err)
+		return false
+	}
+	h.prev = server
+	return true
+}
 
 // KeepAliveState represents state of the heartbeat
 type KeepAliveState int

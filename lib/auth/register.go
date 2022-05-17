@@ -41,7 +41,7 @@ import (
 // LocalRegister is used to generate host keys when a node or proxy is running
 // within the same process as the Auth Server and as such, does not need to
 // use provisioning tokens.
-func LocalRegister(id IdentityID, authServer *Server, additionalPrincipals, dnsNames []string, remoteAddr string) (*Identity, error) {
+func LocalRegister(id IdentityID, authServer *Server, additionalPrincipals, dnsNames []string, remoteAddr string, systemRoles []types.SystemRole) (*Identity, error) {
 	priv, pub, err := authServer.GenerateKeyPair("")
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -68,6 +68,7 @@ func LocalRegister(id IdentityID, authServer *Server, additionalPrincipals, dnsN
 			NoCache:              true,
 			PublicSSHKey:         pub,
 			PublicTLSKey:         tlsPub,
+			SystemRoles:          systemRoles,
 		})
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -495,6 +496,11 @@ type ReRegisterParams struct {
 	PublicSSHKey []byte
 	// Rotation is the rotation state of the certificate authority
 	Rotation types.Rotation
+	// SystemRoles is a set of additional system roles held by the instance.
+	SystemRoles []types.SystemRole
+	// Used by older instances to requisition a multi-role cert by individually
+	// proving which system roles are held.
+	UnstableSystemRoleAssertionID string
 }
 
 // ReRegister renews the certificates and private keys based on the client's existing identity.
@@ -505,14 +511,16 @@ func ReRegister(params ReRegisterParams) (*Identity, error) {
 	}
 	certs, err := params.Client.GenerateHostCerts(context.Background(),
 		&proto.HostCertsRequest{
-			HostID:               hostID,
-			NodeName:             params.ID.NodeName,
-			Role:                 params.ID.Role,
-			AdditionalPrincipals: params.AdditionalPrincipals,
-			DNSNames:             params.DNSNames,
-			PublicTLSKey:         params.PublicTLSKey,
-			PublicSSHKey:         params.PublicSSHKey,
-			Rotation:             &params.Rotation,
+			HostID:                        hostID,
+			NodeName:                      params.ID.NodeName,
+			Role:                          params.ID.Role,
+			AdditionalPrincipals:          params.AdditionalPrincipals,
+			DNSNames:                      params.DNSNames,
+			PublicTLSKey:                  params.PublicTLSKey,
+			PublicSSHKey:                  params.PublicSSHKey,
+			Rotation:                      &params.Rotation,
+			SystemRoles:                   params.SystemRoles,
+			UnstableSystemRoleAssertionID: params.UnstableSystemRoleAssertionID,
 		})
 	if err != nil {
 		return nil, trace.Wrap(err)

@@ -243,6 +243,9 @@ const (
 	// ComponentWindowsDesktop is a Windows desktop access server.
 	ComponentWindowsDesktop = "windows_desktop"
 
+	// ComponentInstance is an abstract component common to all services.
+	ComponentInstance = "instance"
+
 	// DebugEnvVar tells tests to use verbose debug output
 	DebugEnvVar = "DEBUG"
 

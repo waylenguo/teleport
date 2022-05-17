@@ -789,6 +789,16 @@ type IdentityID struct {
 // HostID is host ID part of the host UUID that consists cluster name
 func (id *IdentityID) HostID() (string, error) {
 	parts := strings.Split(id.HostUUID, ".")
+
+	if len(parts) == 1 {
+		// weird case: we sometimes use IdentityID in places where cluster name is
+		// unknown, and in that case we just use the actual host ID without a
+		// cluster name. This seems like a bad idea, but at the time of writing
+		// I'm undecided what the *right* way to do this is.  Maybe always split
+		// off cluster name into a separate field which is simply empty sometimes?
+		return parts[0], nil
+	}
+
 	if len(parts) < 2 {
 		return "", trace.BadParameter("expected 2 parts in %q", id.HostUUID)
 	}

@@ -2016,4 +2016,8 @@ type ClientI interface {
 	GenerateWindowsDesktopCert(context.Context, *proto.WindowsDesktopCertRequest) (*proto.WindowsDesktopCertResponse, error)
 	// GenerateCertAuthorityCRL generates an empty CRL for a CA.
 	GenerateCertAuthorityCRL(context.Context, types.CertAuthType) ([]byte, error)
+
+	GetInventoryStatus(ctx context.Context, req proto.InventoryStatusRequest) (proto.InventoryStatusSummary, error)
+
+	PingInventory(ctx context.Context, req proto.InventoryPingRequest) (proto.InventoryPingResponse, error)
 }
