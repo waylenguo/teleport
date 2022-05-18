@@ -48,6 +48,7 @@ import (
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/profile"
 	"github.com/gravitational/teleport/api/types"
+	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/api/types/wrappers"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/api/utils/keypaths"
@@ -3606,4 +3607,22 @@ func (tc *TeleportClient) GetActiveSessions(ctx context.Context) ([]types.Sessio
 
 	defer proxy.Close()
 	return proxy.GetActiveSessions(ctx)
+}
+
+// SearchSessionEvents allows searching for session events with a full pagination support.
+func (tc *TeleportClient) SearchSessionEvents(ctx context.Context, fromUTC time.Time, toUTC time.Time, limit int, order types.EventOrder, startKey string) ([]apievents.AuditEvent, string, error) {
+	proxyClient, err := tc.ConnectToProxy(ctx)
+	if err != nil {
+		return nil, "", trace.Wrap(err)
+	}
+	defer proxyClient.Close()
+	authClient, err := proxyClient.CurrentClusterAccessPoint(ctx, false)
+	if err != nil {
+		return nil, "", trace.Wrap(err)
+	}
+	decodedEvents, lastKey, err := authClient.SearchSessionEvents(fromUTC, toUTC, limit, order, startKey, nil)
+	if err != nil {
+		return nil, "", trace.Wrap(err)
+	}
+	return decodedEvents, lastKey, nil
 }
