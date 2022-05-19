@@ -1207,11 +1207,10 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 			return nil, trace.Wrap(err)
 		}
 
-		servers := types.AppServers(appservers)
+		servers := types.AppServers(types.DeduplicateAppServers(appservers))
 		if err := servers.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
-		servers = types.DeduplicateAppServers(servers)
 		resources = servers.AsResources()
 
 	case types.KindDatabaseServer:
@@ -1220,11 +1219,10 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 			return nil, trace.Wrap(err)
 		}
 
-		servers := types.DatabaseServers(dbservers)
+		servers := types.DatabaseServers(types.DeduplicateDatabaseServers(dbservers))
 		if err := servers.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
-		servers = types.DeduplicateDatabaseServers(servers)
 		resources = servers.AsResources()
 
 	case types.KindKubernetesCluster:
@@ -1257,11 +1255,10 @@ func (a *ServerWithRoles) listResourcesWithSort(ctx context.Context, req proto.L
 			return nil, trace.Wrap(err)
 		}
 
-		desktops := types.WindowsDesktops(windowsdesktops)
+		desktops := types.WindowsDesktops(types.DeduplicateDesktops(windowsdesktops))
 		if err := desktops.SortByCustom(req.SortBy); err != nil {
 			return nil, trace.Wrap(err)
 		}
-		desktops = types.DeduplicateDesktops(desktops)
 		resources = desktops.AsResources()
 
 	default:
