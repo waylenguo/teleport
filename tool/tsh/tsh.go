@@ -3004,7 +3004,7 @@ func onApps(cf *CLIConf) error {
 }
 
 // TODO: Move this somewhere more appropriate
-const defaultSearchSessionPAgeLimit = 50
+const defaultSearchSessionPageLimit = 50
 
 func onSessions(cf *CLIConf) error {
 	tc, err := makeClient(cf, false)
@@ -3018,7 +3018,7 @@ func onSessions(cf *CLIConf) error {
 		sessions = []apievents.AuditEvent{}
 		for {
 			nextEvents, eventKey, err := tc.SearchSessionEvents(cf.Context,
-				time.Unix(0, 0), time.Now(), defaultSearchSessionPAgeLimit,
+				time.Unix(0, 0), time.Now(), defaultSearchSessionPageLimit,
 				types.EventOrderDescending, prevEventKey)
 			if err != nil {
 				return err
