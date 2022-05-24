@@ -208,6 +208,10 @@ type Config struct {
 
 	// CertAuthorityWatcher is a cert authority watcher.
 	CertAuthorityWatcher *services.CertAuthorityWatcher
+
+	// LocalAuthServers is a list of auth servers to use when dialing back to
+	// the local cluster.
+	LocalAuthServers []string
 }
 
 // CheckAndSetDefaults checks parameters and sets default values
@@ -629,6 +633,7 @@ func (s *server) handleTransport(sconn *ssh.ServerConn, nch ssh.NewChannel) {
 		log:              s.log,
 		closeContext:     s.ctx,
 		authClient:       s.LocalAccessPoint,
+		authServers:      s.LocalAuthServers,
 		channel:          channel,
 		requestCh:        requestCh,
 		component:        teleport.ComponentReverseTunnelServer,

@@ -95,6 +95,9 @@ type AgentPoolConfig struct {
 	Cluster string
 	// FIPS indicates if Teleport was started in FIPS mode.
 	FIPS bool
+	// LocalAuthServers is a list of auth servers to use when dialing back to
+	// the local cluster.
+	LocalAuthServers []string
 }
 
 // CheckAndSetDefaults checks and sets defaults
@@ -291,6 +294,7 @@ func (m *AgentPool) addAgent(lease track.Lease) error {
 		Signer:               m.cfg.HostSigner,
 		Client:               m.cfg.Client,
 		AccessPoint:          m.cfg.AccessPoint,
+		LocalAuthAddresses:   m.cfg.LocalAuthServers,
 		Context:              m.ctx,
 		KubeDialAddr:         m.cfg.KubeDialAddr,
 		Server:               m.cfg.Server,

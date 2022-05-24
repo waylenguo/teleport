@@ -109,6 +109,9 @@ type AgentConfig struct {
 	// due to sequential Ping, Dial method order and sequential backend picking by RoundRobbing Load Balancer
 	// the Ping call will always reach Proxy A and the Dial call will always be forwarded by the LB to Proxy B.
 	reverseTunnelDetails *reverseTunnelDetails
+	// LocalAuthServers is a list of auth servers to use when dialing back to
+	// the local cluster.
+	LocalAuthAddresses []string
 }
 
 // CheckAndSetDefaults checks parameters and sets default values
@@ -516,6 +519,7 @@ func (a *Agent) processRequests(conn *ssh.Client) error {
 				log:                 a.log,
 				closeContext:        a.ctx,
 				authClient:          a.Client,
+				authServers:         a.LocalAuthAddresses,
 				kubeDialAddr:        a.KubeDialAddr,
 				channel:             ch,
 				requestCh:           req,

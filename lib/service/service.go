@@ -2000,15 +2000,16 @@ func (process *TeleportProcess) initSSH() error {
 			agentPool, err = reversetunnel.NewAgentPool(
 				process.ExitContext(),
 				reversetunnel.AgentPoolConfig{
-					Component:   teleport.ComponentNode,
-					HostUUID:    conn.ServerIdentity.ID.HostUUID,
-					Resolver:    conn.TunnelProxyResolver(),
-					Client:      conn.Client,
-					AccessPoint: conn.Client,
-					HostSigner:  conn.ServerIdentity.KeySigner,
-					Cluster:     conn.ServerIdentity.Cert.Extensions[utils.CertExtensionAuthority],
-					Server:      s,
-					FIPS:        process.Config.FIPS,
+					Component:        teleport.ComponentNode,
+					HostUUID:         conn.ServerIdentity.ID.HostUUID,
+					Resolver:         conn.TunnelProxyResolver(),
+					Client:           conn.Client,
+					AccessPoint:      conn.Client,
+					LocalAuthServers: utils.NetAddrsToStrings(process.Config.AuthServers),
+					HostSigner:       conn.ServerIdentity.KeySigner,
+					Cluster:          conn.ServerIdentity.Cert.Extensions[utils.CertExtensionAuthority],
+					Server:           s,
+					FIPS:             process.Config.FIPS,
 				})
 			if err != nil {
 				return trace.Wrap(err)
@@ -2908,6 +2909,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				LockWatcher:          lockWatcher,
 				NodeWatcher:          nodeWatcher,
 				CertAuthorityWatcher: caWatcher,
+				LocalAuthServers:     utils.NetAddrsToStrings(process.Config.AuthServers),
 			})
 		if err != nil {
 			return trace.Wrap(err)
@@ -3073,6 +3075,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		ReverseTunnelServer: tsrv,
 		FIPS:                process.Config.FIPS,
 		Log:                 rcWatchLog,
+		LocalAuthServers:    utils.NetAddrsToStrings(process.Config.AuthServers),
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -3737,15 +3740,16 @@ func (process *TeleportProcess) initApps() {
 		agentPool, err = reversetunnel.NewAgentPool(
 			process.ExitContext(),
 			reversetunnel.AgentPoolConfig{
-				Component:   teleport.ComponentApp,
-				HostUUID:    conn.ServerIdentity.ID.HostUUID,
-				Resolver:    tunnelAddrResolver,
-				Client:      conn.Client,
-				Server:      appServer,
-				AccessPoint: accessPoint,
-				HostSigner:  conn.ServerIdentity.KeySigner,
-				Cluster:     clusterName,
-				FIPS:        process.Config.FIPS,
+				Component:        teleport.ComponentApp,
+				HostUUID:         conn.ServerIdentity.ID.HostUUID,
+				Resolver:         tunnelAddrResolver,
+				Client:           conn.Client,
+				LocalAuthServers: utils.NetAddrsToStrings(process.Config.AuthServers),
+				Server:           appServer,
+				AccessPoint:      accessPoint,
+				HostSigner:       conn.ServerIdentity.KeySigner,
+				Cluster:          clusterName,
+				FIPS:             process.Config.FIPS,
 			})
 		if err != nil {
 			return trace.Wrap(err)
