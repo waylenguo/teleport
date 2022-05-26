@@ -187,7 +187,7 @@ func (a *AuthCommand) ExportAuthorities(ctx context.Context, client auth.ClientI
 		}
 		typesToExport = []types.CertAuthType{authType}
 	}
-	localAuthName, err := client.GetDomainName()
+	localAuthName, err := client.GetDomainName(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -266,7 +266,7 @@ func (a *AuthCommand) ExportAuthorities(ctx context.Context, client auth.ClientI
 }
 
 func (a *AuthCommand) exportTLSAuthority(ctx context.Context, client auth.ClientI, typ types.CertAuthType, unpackPEM bool) error {
-	clusterName, err := client.GetDomainName()
+	clusterName, err := client.GetDomainName(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -311,12 +311,12 @@ func (a *AuthCommand) GenerateKeys(ctx context.Context) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = os.WriteFile(a.genPubPath, pubBytes, 0600)
+	err = os.WriteFile(a.genPubPath, pubBytes, 0o600)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	err = os.WriteFile(a.genPrivPath, privBytes, 0600)
+	err = os.WriteFile(a.genPrivPath, privBytes, 0o600)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -729,7 +729,6 @@ func (a *AuthCommand) checkLeafCluster(clusterAPI auth.ClientI) error {
 	}
 
 	return trace.BadParameter("couldn't find leaf cluster named %q", a.leafCluster)
-
 }
 
 func (a *AuthCommand) checkKubeCluster(ctx context.Context, clusterAPI auth.ClientI) error {

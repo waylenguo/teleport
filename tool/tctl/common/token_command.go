@@ -142,6 +142,8 @@ func (c *TokensCommand) TryRun(cmd string, client auth.ClientI) (match bool, err
 
 // Add is called to execute "tokens add ..." command.
 func (c *TokensCommand) Add(client auth.ClientI) error {
+	// TODO: Inject ctx from `Run()`
+	ctx := context.TODO()
 	// Parse string to see if it's a type of role that Teleport supports.
 	roles, err := types.ParseTeleportRoles(c.tokenType)
 	if err != nil {
@@ -157,7 +159,7 @@ func (c *TokensCommand) Add(client auth.ClientI) error {
 	}
 
 	// Generate token.
-	token, err := client.GenerateToken(context.TODO(), auth.GenerateTokenRequest{
+	token, err := client.GenerateToken(ctx, auth.GenerateTokenRequest{
 		Roles:  roles,
 		TTL:    c.ttl,
 		Token:  c.value,
@@ -199,7 +201,7 @@ func (c *TokensCommand) Add(client auth.ClientI) error {
 
 	// Calculate the CA pins for this cluster. The CA pins are used by the
 	// client to verify the identity of the Auth Server.
-	localCAResponse, err := client.GetClusterCACert()
+	localCAResponse, err := client.GetClusterCACert(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -264,7 +266,7 @@ func (c *TokensCommand) Add(client auth.ClientI) error {
 	default:
 		authServer := authServers[0].GetAddr()
 
-		pingResponse, err := client.Ping(context.TODO())
+		pingResponse, err := client.Ping(ctx)
 		if err != nil {
 			log.Debugf("unnable to ping auth client: %s.", err.Error())
 		}

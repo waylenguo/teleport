@@ -136,19 +136,21 @@ Please note:
 // Invite generates a token which can be used to add another SSH node
 // to a cluster
 func (c *NodeCommand) Invite(client auth.ClientI) error {
+	// TODO: Inject ctx from `Run()`
+	ctx := context.TODO()
 	// parse --roles flag
 	roles, err := types.ParseTeleportRoles(c.roles)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	token, err := client.GenerateToken(context.TODO(), auth.GenerateTokenRequest{Roles: roles, TTL: c.ttl, Token: c.token})
+	token, err := client.GenerateToken(ctx, auth.GenerateTokenRequest{Roles: roles, TTL: c.ttl, Token: c.token})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Calculate the CA pins for this cluster. The CA pins are used by the
 	// client to verify the identity of the Auth Server.
-	localCAResponse, err := client.GetClusterCACert()
+	localCAResponse, err := client.GetClusterCACert(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}

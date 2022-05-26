@@ -76,7 +76,7 @@ func (c *StatusCommand) Status(ctx context.Context, client auth.ClientI) error {
 
 	// Calculate the CA pins for this cluster. The CA pins are used by the
 	// client to verify the identity of the Auth Server.
-	localCAResponse, err := client.GetClusterCACert()
+	localCAResponse, err := client.GetClusterCACert(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -106,12 +106,14 @@ func (c *StatusCommand) Status(ctx context.Context, client auth.ClientI) error {
 					"has been completed.")
 			}
 			if c.config.Debug {
-				table.AddRow([]string{info,
+				table.AddRow([]string{
+					info,
 					fmt.Sprintf("%v, update_servers: %v, complete: %v",
 						rotation.String(),
 						rotation.Schedule.UpdateServers.Format(constants.HumanDateFormatSeconds),
 						rotation.Schedule.Standby.Format(constants.HumanDateFormatSeconds),
-					)})
+					),
+				})
 			} else {
 				table.AddRow([]string{info, rotation.String()})
 			}
