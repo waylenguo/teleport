@@ -593,7 +593,7 @@ func (proxy *ProxyClient) FindServersByLabels(ctx context.Context, namespace str
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	return auth.GetNodesWithLabels(ctx, site, namespace, labels)
+	return client.GetNodesWithLabels(ctx, site, namespace, labels)
 }
 
 // FindServersByFilters returns list of the nodes which have filters matched.
