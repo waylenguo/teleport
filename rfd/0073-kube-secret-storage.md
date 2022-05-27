@@ -127,7 +127,7 @@ The Teleport Kube Agent service account must be able to read and edit secrets wi
 - apiGroups: [""]
   # objects is "secrets"
   resources: ["secrets"]
-  verbs: ["get", "update","watch", "list"]
+  verbs: ["create", "get", "update","watch", "list"]
 ```
 
 This allows the Kube Agent to read, update and list secrets using the credentials that Kubernetes mounts for each pod running in the cluster.
@@ -245,7 +245,7 @@ The following diagram demonstrates the behaviour when using Kubernetes' Secret b
                                                     ║              │                New certificates                 │                    │               ║          
                                                     ║              │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │                    │               ║          
                                                     ║              │                                                 │                    │               ║          
-                                                    ║              │                     Update certificate content  │                    │               ║          
+                                                    ║              │                     Update secret content       │                    │               ║          
                                                     ║              │─────────────────────────────────────────────────────────────────────>│               ║          
                                                     ╚══════════════╪═════════════════════════════════════════════════╪════════════════════╪═══════════════╝          
                                                               ┌────┴────┐                                        ┌───┴────┐          ┌────┴─────┐                    
@@ -318,7 +318,7 @@ The storage must, for now, skip the writing requests for events of type `kind=st
 
 ### Helm Chart Differences
 
-File **templates/config.yaml**:
+#### File *templates/config.yaml*
 
 ```diff
 {{- $logLevel := (coalesce .Values.logLevel .Values.log.level "INFO") -}}
@@ -352,14 +352,77 @@ data:
       auth_servers: ["{{ required "proxyAddr is required in chart values" .Values.proxyAddr }}"]
 ```
 
-File `values.yaml`:
+#### File *templates/deployment.yaml*
 
 ```diff
-storage:
-  enabled: false
-  storageClassName: ""
-  requests: 128Mi
+#
+# Warning to maintainers, any changes to this file that are not specific to the Deployment need to also be duplicated
+# in the statefulset.yaml file.
+#
+-{{- if not .Values.storage.enabled }}
+{{- $replicaCount := (coalesce .Values.replicaCount .Values.highAvailability.replicaCount "1") }}
++{{- if and (not .Values.storage.enabled) (eq $replicaCount 1) }}
+...
+-        {{- if .Values.extraEnv }}
+-        env:
+-          {{- toYaml .Values.extraEnv | nindent 8 }}
+-        {{- end }}
++        env:
++          - name: TELEPORT_REPLICA_NAME
++            value: {{ .Release.Name }}
++         {{- if .Values.extraEnv }}
++          {{- toYaml .Values.extraEnv | nindent 8 }}
++        {{- end }}
 ```
+
+#### File *templates/statefulset.yaml*
+
+```diff
+#
+# Warning to maintainers, any changes to this file that are not specific to the StatefulSet need to also be duplicated
+# in the deployment.yaml file.
+#
+-{{- if .Values.storage.enabled }}
+{{- $replicaCount := (coalesce .Values.replicaCount .Values.highAvailability.replicaCount "1") }}
++{{- if or (.Values.storage.enabled) (neq $replicaCount 1) }}
+...
+-        {{- if .Values.extraEnv }}
+-        env:
+-          {{- toYaml .Values.extraEnv | nindent 8 }}
+-        {{- end }}
++        env:
++          - name: TELEPORT_REPLICA_NAME
++            valueFrom:
++              fieldRef:
++                 fieldPath: metadata.name
++         {{- if .Values.extraEnv }}
++          {{- toYaml .Values.extraEnv | nindent 10 }}
++        {{- end }}
+
+# remove PV storage if storage is not enabled
+...
++{{- if .Values.storage.enabled }}
+        - mountPath: /var/lib/teleport
+          name: "{{ .Release.Name }}-teleport-data"
++{{- end }}
+...
++{{- if .Values.storage.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: "{{ .Release.Name }}-teleport-data"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.requests }}
++{{- end }}
+{{- end }}
+```
+
+#### File *values.yaml*
+
+Change storage comments
 
 ## Instalation
 
