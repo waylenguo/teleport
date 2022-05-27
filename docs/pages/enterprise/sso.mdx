@@ -92,7 +92,8 @@ To configure SSO, a Teleport administrator must:
 - Update `/etc/teleport.yaml` on the auth server to set the default
   authentication connector.
 - Define the connector [resource](../setup/reference/resources.mdx) and save it into
-  a YAML file (like `connector.yaml`)
+  a YAML file (like `connector.yaml`). We recommend the usage of helper commands to achieve this for [SAML](../setup/reference/cli.mdx#tctl-sso-configure-saml), [OIDC](../setup/reference/cli.mdx#tctl-sso-configure-oidc) and [GitHub](../setup/reference/cli.mdx#tctl-sso-configure-github) connectors.
+- Test the connector for validity using [`tctl sso test`](../setup/reference/cli.mdx#tctl-sso-test) command.
 - Create the connector using `tctl create connector.yaml`.
 
 ```yaml
@@ -129,11 +130,12 @@ spec:
      - { name: "group", value: "^ssh_admin_(.*)$", roles: ["admin-$1"] }
 
   entity_descriptor: |
-    <paste SAML XML contents here>
+    <SAML XML contents here>
 ```
 
 - See [examples/resources](https://github.com/gravitational/teleport/tree/master/examples/resources)
   directory in the Teleport Github repository for examples of possible connectors.
+- Manually pasting the XML to `entity_descriptor` field is error prone. We recommend using `tctl sso configure saml -e entity_descriptor.xml` command instead.
 - You may use `entity_descriptor_url`, in lieu of `entity_descriptor`, to fetch the entity descriptor from
   your IDP. Though, we recommend "pinning" the entity descriptor by including the XML rather than fetching from a URL.
 
@@ -236,13 +238,14 @@ SAML and OIDC types:
 
 ## SSO Customization
 
-| Provider | YAML | Example |
-| - | - | - |
-| Github | `display: Github` | ![github](../../img/teleport-sso/github@2x.png) |
+| Provider  | YAML                 | Example                                               |
+|-----------|----------------------|-------------------------------------------------------|
+| Github    | `display: Github`    | ![github](../../img/teleport-sso/github@2x.png)       |
 | Microsoft | `display: Microsoft` | ![microsoft](../../img/teleport-sso/microsoft@2x.png) |
-| Google | `display: Google` | ![google](../../img/teleport-sso/google@2x.png) |
+| Google    | `display: Google`    | ![google](../../img/teleport-sso/google@2x.png)       |
 | BitBucket | `display: Bitbucket` | ![bitbucket](../../img/teleport-sso/bitbucket@2x.png) |
-| OpenID | `display: Okta` | ![Okta](../../img/teleport-sso/openId@2x.png) |
+| OpenID    | `display: Okta`      | ![Okta](../../img/teleport-sso/openId@2x.png)         |
+
 
 ## Troubleshooting
 
@@ -260,8 +263,10 @@ must be able to:
 
 If something is not working, we recommend to:
 
+- Run the connector definition through [`tctl sso test`](../setup/reference/cli.mdx#tctl-sso-test) command.
 - Double-check the host names, tokens and TCP ports in a connector definition.
-
+- Double-check the role mapping in connector definition for possible typos.
+- Verify the configuration on IdP side (callback URLs, claim names, scopes, ...).
 
 ### Using the Web UI
 
