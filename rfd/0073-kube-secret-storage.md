@@ -384,7 +384,7 @@ data:
 #
 -{{- if .Values.storage.enabled }}
 {{- $replicaCount := (coalesce .Values.replicaCount .Values.highAvailability.replicaCount "1") }}
-+{{- if or (.Values.storage.enabled) (neq $replicaCount 1) }}
++{{- if or (.Values.storage.enabled) (ne $replicaCount 1) }}
 ...
 -        {{- if .Values.extraEnv }}
 -        env:
