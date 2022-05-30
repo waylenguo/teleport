@@ -41,12 +41,13 @@ Given this, it is required to expose the `$TELEPORT_REPLICA_NAME` environment va
 - Deployment: `TELEPORT_REPLICA_NAME` is a constant string `{{ .Release.Name }}`.
 - Statefulset: `TELEPORT_REPLICA_NAME` is a dynamic value provided by Kubernetes `fieldPath: metadata.name`.
 
-Operating the number of replicas must always happen via `helm upgrade`. If the operator decides to do a manual increase of replicas by editing the Kubernetes objects, it will have the following limitations:
+When an operator wants to upgrade from an old chart to the Helm chart that implements this RFD and his setup has no storage, it's running as Deployment, and the replica number was bigger than 1, it will lead into a switch from Deployment to a Statefulset. 
+This change is managed by Helm by destroying the Deployment object and creating the new Statefulset. During this transition, even if the operator has the PodDisruptionBudget object enabled, the Kubernetes cluster might become inaccessible from Teleport because there is no guarantee that the system has at least one agent replica running.
+
+Another limitation that appears when the operator wants to change the number of replicas is that this process must necessarily be executed through Helm. If the operator decides to do a manual increase of replicas by editing the Kubernetes objects, it will have the following limitations, depending on the object type:
 
 - `Deployment`: all agents will use the exact same identity when accessing the cluster.
-- `Statefulset`: replicas will fail to start. They will try to join the cluster again because they cannot read their secrets. This happens because each replica will have its own identity secret and RBAC only lists access rules to some of them, resulting in pods not being able to read the secrets for newest replicas and eventually, the new replicas will trigger the cluster invitation process.
-
-
+- `Statefulset`: some replicas will fail to start. They will try to join the cluster again because they cannot read their secrets. This happens because each replica will have its own identity secret and RBAC only lists access rules to some of them, resulting in pods not being able to read the secrets for newest replicas and, eventually, the new replicas will trigger the cluster invitation process.
 
 ### Secret creation and lifecycle
 
@@ -125,17 +126,6 @@ If secret storage is enabled, the Teleport Kube agent initializes with Kubernete
 | teleport instance state | ID and credentials of a non-auth teleport instance (e.g. node, proxy, kube) | Local directory, Kube Secret (only available for role=kube) |
 
 The storage backend will be responsible for managing the Kubernetes secret, i.e. reading and updating its contents, in order to create a transparent storage backend.
-
-The configuration of the Kubernetes' Secret storage backend is done by adding the `storage` section to the teleport config.
-
-```yaml
-teleport:
-...
-  storage:
-    # Type of backend: either "local" or "kubernetes_secret", by default "local"
-    type: kubernetes_secret
-...
-```
 
 If the identity secret exists in Kubernetes and has the node identity on it (entry for `$TELEPORT_REPLICA_NAME`), the storage engine will parse and return the keys to the Agent, so it can use them to authenticate in the Teleport Cluster. If the cluster access operation is successful, the agent will be available for usage, but if the access operation fails because the Teleport Auth does not validate the node credentials, the Agent will log an error providing insightful information about the failure cause.
 
@@ -411,7 +401,7 @@ Change storage comments
 
 ## Installation
 
-If the user does not provide `storage.enabled=true`, Teleport Kube Agent chart enables, by default, the Kube secret storage. This means that there is no change to the end user.
+If the user does not provide `storage.enabled=true`, Teleport Kube Agent enables, by default, the Kube secret storage. This means that there is no change to the end user.
 
 ```bash
 $ helm install teleport-kube-agent . \
