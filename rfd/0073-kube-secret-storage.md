@@ -41,18 +41,18 @@ Given this, it is required to expose the `$TELEPORT_REPLICA_NAME` environment va
 - Deployment: `TELEPORT_REPLICA_NAME` is a constant string `{{ .Release.Name }}`.
 - Statefulset: `TELEPORT_REPLICA_NAME` is a dynamic value provided by Kubernetes `fieldPath: metadata.name`.
 
-When an operator wants to upgrade from an old chart to the Helm chart that implements this RFD and his setup has no storage, it's running as Deployment, and the replica number was bigger than 1, it will lead into a switch from Deployment to a Statefulset. 
-This change is managed by Helm by destroying the Deployment object and creating the new Statefulset. During this transition, even if the operator has the PodDisruptionBudget object enabled, the Kubernetes cluster might become inaccessible from Teleport because there is no guarantee that the system has at least one agent replica running.
+When an operator wants to upgrade from an old chart to the Helm chart that implements this RFD and his setup has no storage and the replica number was bigger than 1, it will lead into a switch from Deployment to a Statefulset. Helm manages this change by destroying the Deployment object and creating the new Statefulset. During this transition, even if the operator has the PodDisruptionBudget object enabled, the Kubernetes cluster might become inaccessible from Teleport because there is no guarantee that the system has at least one agent replica running.
 
-Another limitation that appears when the operator wants to change the number of replicas is that this process must necessarily be executed through Helm. If the operator decides to do a manual increase of replicas by editing the Kubernetes objects, it will have the following limitations, depending on the object type:
+Another limitation that appears when the operator wants to change the number of replicas they must execute this process through Helm. If the operator does a manual increase of the number of replicas by editing the Kubernetes objects, it will cause the following limitations, depending on the object type:
 
-- `Deployment`: all agents will use the exact same identity when accessing the cluster.
-- `Statefulset`: some replicas will fail to start. They will try to join the cluster again because they cannot read their secrets. This happens because each replica will have its own identity secret and RBAC only lists access rules to some of them, resulting in pods not being able to read the secrets for newest replicas and, eventually, the new replicas will trigger the cluster invitation process.
+- `Deployment`: all agents will use the same identity when accessing the cluster.
+- `Statefulset`: some replicas cannot start. They will try to join the cluster again because they cannot read their secrets. This happens because each replica will have its own identity secret and RBAC only lists access rules to some of them, resulting in pods not being able to read the secrets for newest replicas and the new replicas will trigger the cluster invitation process each time they restart.
 
 ### Secret creation and lifecycle
 
-Secrets are created, read and updated by the agent.
-The agent will never issue a delete request to destroy the secret. This is achieved by Helm's `post-delete` hook once `helm uninstall` is executed.
+The agent creates, reads and updates the Kubernetes Secrets.
+
+The agent will never issue a delete request to destroy the secret. Helm’s `post-delete` hook achieves this once the operator executes `helm uninstall`.
 
 #### Secret content
 
@@ -110,7 +110,7 @@ The Teleport Kube Agent service account must be able to create, read and update 
   verbs: ["get", "update","watch", "list"]
 ```
 
-The RBAC only allows the service account to read and update the secrets listed under `resourceNames` entry. The `create` verb must be handled in a separate case because during the authorization of the request, Kubernetes does not know the resource name and cannot allow the resource creation [[1](#Links)].
+The RBAC only allows the service account to read and update the secrets listed under `resourceNames` entry. The `create` verb must be handled in a separate case because during the authorization process, Kubernetes does not know the resource name and cannot allow its creation [[1](#Links)].
 
 ### Teleport Changes
 
@@ -129,11 +129,11 @@ The storage backend will be responsible for managing the Kubernetes secret, i.e.
 
 If the identity secret exists in Kubernetes and has the node identity on it (entry for `$TELEPORT_REPLICA_NAME`), the storage engine will parse and return the keys to the Agent, so it can use them to authenticate in the Teleport Cluster. If the cluster access operation is successful, the agent will be available for usage, but if the access operation fails because the Teleport Auth does not validate the node credentials, the Agent will log an error providing insightful information about the failure cause.
 
-In case of the identity secret does not exist or is empty, the Kube Agent will try to join the cluster with the invite token provided. If the invite token is valid (has details in the Teleport Cluster and did not expire yet), Teleport Cluster will reply with the agent identity. Given the identity, the Kube Agent will issue a write request to the storage backend that results in the update of the content in the secret `{{ .Release.Name }}-identity`.
+In case of the identity secret does not exist or is empty, the Kube Agent will try to join the cluster with the invite token provided. If the invite token is valid (has details in the Teleport Cluster and did not expire yet), Teleport Cluster will reply with the agent identity. Given the identity, the Kube Agent will write it in the secret `{{ .Release.Name }}-identity-{{$TELEPORT_REPLICA_NAME}}` for future usage.
 
-If the invite token is not valid or has expired, the Agent could not join the cluster, and it will stop and log a meaningful error message.
+Otherwise, if the invite token is not valid or has expired, the Agent could not join the cluster, and it will stop and log a meaningful error message.
 
-The following diagram demonstrates the behavior when using Kubernetes' Secret backend storage.
+The following diagram shows the behavior when using Kubernetes’ Secret backend storage.
 
 ```text
                                                               ┌─────────┐                                        ┌────────┐          ┌──────────┐                    
@@ -289,7 +289,9 @@ The storage must, for now, skip the writing requests for events of type `kind=st
 
 CA rotation feature allows the cluster operator to force the cluster to recreate and re-issue certificates for users and agents. During this procedure, agents and users receive the new keys signed by the newest CA from Teleport Auth.
 
-While the cluster is transitioning, the keys signed by the old CA are considered valid, so the agent is able to receive its new identity certificates from Teleport Auth. Once this happens it will replace the identity stored in Kubernetes secret with the fresh ones and will immediately start using the new credentials to re-register in the cluster.
+While the cluster is transitioning, the keys signed by the old CA are considered valid in order to the agent being able to receive its new identity certificates from Teleport Auth. 
+
+Once the new identity is received by the Kube Agent, it will replace the identity stored in Kubernetes secret by the received one and starts using the new credentials to re-register himself in the cluster.
 
 ### Helm Chart Differences
 
